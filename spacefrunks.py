@@ -1,4 +1,9 @@
 import pygame, random, sys, time, types
+try:
+	import cPickle as pickle
+except:
+	import pickle
+
 from pygame.locals import *
 
 pygame.init()
@@ -9,6 +14,22 @@ height = 480
 DISPLAYSURF = pygame.display.set_mode((width, height))
 pygame.display.set_caption('Space Frunks')
 pygame.mouse.set_visible(0)
+
+#attempts to load high scores.  if it cannot,
+#creates new 'default' hi scores.
+try:
+	f = open('scores.py', 'r')
+	rawScoreList = f.read()
+	scoreList = pickle.loads(rawScoreList)
+	f.close()
+except:
+	scoreList = [['NEW', 1000], ['SCR', 800], ['LST', 500]]
+	
+	
+#should probably put the constant variables and
+#syntactic sugar up here
+GAMEFONT = pygame.font.Font('freesansbold.ttf', 24)
+
 
 class Player(pygame.sprite.Sprite):
 
@@ -244,11 +265,11 @@ def star_update():
 		star[1] += 1
 
 		if starCounter % 3 == 1:
-			pass
+			#pass
 			star[1] += 1
 
 		if starCounter % 5 == 1:
-			pass
+			#pass
 			star[1] += 1
 
 		#when a star goes offscreen, reset it up top
@@ -415,7 +436,7 @@ class GameHandler(object):
 		
 		DISPLAYSURF.blit(gameOverSurf, gameOverRect)
 		pygame.display.flip()
-		time.sleep(4)
+		time.sleep(2)
 		pygame.event.get() #empty event queue
 
 
@@ -425,6 +446,86 @@ class GameHandler(object):
 			thing.kill()
 		for thing in goodqueue:
 			thing.kill()
+		
+		#set scoreString to empty in case of input.
+		#set a bool if ship.score is high enough
+		scoreString = ''
+		if ship.score > scoreList[-1][1]:
+			collectScore = True
+		else:
+			collectScore = False
+		
+		displayScores = True
+		while displayScores:
+			for event in pygame.event.get():
+				if event.type == QUIT:
+					pygame.quit()
+					sys.exit()
+				elif event.type == KEYDOWN:
+					#handle keyboard events to allow for the same
+					#loop to both record the score, as well as
+					#kick the user back to the intro screen once
+					#the score entry is over
+					if collectScore:
+						if str(event.unicode).isalnum():
+							scoreString += str(event.unicode).upper()
+						else:
+							pass
+					else:
+						displayScores = False
+			
+			DISPLAYSURF.fill(BLACK)
+			star_update()
+			
+			#if collectScore, get the score
+			#if false, iterate over the scoreList and draw the scores
+			
+			if collectScore:
+				#while scoreString is short, display the characters.
+				#once it gets to be 3 characters long, add it to the
+				#score list, then sort it based on the scores, reverse it,
+				#and pop off any scores that are beyond the fifth score.
+				#then pickle and save. only saves if a new score is actually added.
+				if len(scoreString) < 3:
+					congratsObj = GAMEFONT.render('High score!  Enter your name, frunk destroyer.', True, GREEN)
+					congratsRect = congratsObj.get_rect()
+					congratsRect.center = (width / 2, height / 10)
+					newScoreObj = GAMEFONT.render(scoreString, True, WHITE)
+					newScoreRect = newScoreObj.get_rect()
+					newScoreRect.center = (height / 2, width / 2)
+					
+					DISPLAYSURF.blit(congratsObj, congratsRect)
+					try:
+						DISPLAYSURF.blit(newScoreObj, newScoreRect)
+					except:
+						pass
+				else:
+					scoreList.append([scoreString, ship.score])
+					scoreList.sort(key=lambda x: x[1])
+					scoreList.reverse()
+					while len(scoreList) > 5:
+						scoreList.pop()
+					pickleScore = pickle.dumps(scoreList)
+					f = open('scores.py', 'w')
+					f.write(pickleScore)
+					f.close()
+					collectScore = False
+			else:
+				totalScores = 1
+				for name, score in scoreList:
+					nameSurf = GAMEFONT.render(name, True, GREEN)
+					nameRect = nameSurf.get_rect()
+					nameRect.center = (width / 3, (width/8) * totalScores)
+					scoreSurf = GAMEFONT.render(str(score), True, GREEN)
+					scoreRect = scoreSurf.get_rect()
+					scoreRect.center = (2*(width / 3), (width/8) * totalScores)
+		
+					DISPLAYSURF.blit(nameSurf, nameRect)
+					DISPLAYSURF.blit(scoreSurf, scoreRect)
+					totalScores += 1
+			
+			pygame.display.flip()
+			fpsClock.tick(FPS)
 
 	def master_loop(self):
 		#the one loop that binds them all
