@@ -1,14 +1,23 @@
 Hey, this is my first attempt at a cohesive Python project.
 
-Space Frunks is a simple space shooter that simply goes and goes and goes and goes until you're out of guys.  Think "Golden Age of Gaming".  Think Robotron meets Asteroids, but you know, gimpy.
+Space Frunks is a simple space shooter that simply goes and goes and goes and goes 
+until you're out of guys.  Think "Golden Age of Gaming".  
+Think Robotron meets Asteroids, but you know, gimpy.
 
-The controls are basic.  The mouse moves the ship in real-time; the 10-key pad fires in 8 directions(5 is nonfunctional).  
+The controls are basic.  The mouse moves the ship in real-time; the 10-key pad 
+fires in 8 directions(5 is nonfunctional).  
 
-The bad guys - or 'frunks', I guess - just really don't want you in space, and so move in largely predictable patterns and fire in random directions to make you stop being in space.
+The bad guys - or 'frunks', I guess - just really don't want you in space, 
+and so move in largely predictable patterns and fire in random directions to 
+make you stop being in space.
 
 This game has been written in Python 2.7 and requires PyGame.
 
 Present state of things:
+
+07/30/12 - added hi-score list.  uses pickle to dumps/loads data.  keeps input
+more or less sanitized by checking the event.unicode against str.isalnum().
+I could have messed with the namespace stuff b/c it's bugging me now, but meh.
 
 06/26/12 - first commit to GitHub!  Currently the game has some notable missing features:
 	- it's silent
