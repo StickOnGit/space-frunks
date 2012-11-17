@@ -1,4 +1,4 @@
-import pygame, random, sys, time, types
+import pygame, random, os, sys, time, types
 try:
 	import cPickle as pickle
 except:
@@ -6,6 +6,7 @@ except:
 
 from pygame.locals import *
 
+pygame.mixer.pre_init(44100, -16, 2, 2048) # fixes sound lag
 pygame.init()
 
 width = 640
@@ -23,8 +24,16 @@ try:
 	scoreList = pickle.loads(rawScoreList)
 	f.close()
 except:
-	scoreList = [['NEW', 1000], ['SCR', 800], ['LST', 500]]
-	
+	scoreList = [['NMB', 15000], ['HAS', 12000], ['LDS', 10000], ['AKT', 8000], ['JTD', 5000]]
+
+#loads sounds
+enemyDeadSound = pygame.mixer.Sound(os.path.join('sounds', 'enemydead.wav'))
+playerDeadSound = pygame.mixer.Sound(os.path.join('sounds', 'playerdead.wav'))
+teleportSound = pygame.mixer.Sound(os.path.join('sounds', 'teleport.wav'))
+enemyShotSound = pygame.mixer.Sound(os.path.join('sounds', 'enemyshot.wav'))
+playerShotSound = pygame.mixer.Sound(os.path.join('sounds', 'playershot.wav'))
+
+#don't forget the gameOver music... it's handled differently
 	
 #should probably put the constant variables and
 #syntactic sugar up here
@@ -81,6 +90,7 @@ class Player(pygame.sprite.Sprite):
 				shot = Bullet(shotx, shoty, shotDirection)
 				goodqueue.add(shot)
 				self.cooldown = 10
+				playerShotSound.play()
 
 
 	def update(self):
@@ -91,7 +101,7 @@ class Player(pygame.sprite.Sprite):
 
 		#grants an extra life every X points
 		#set higher once game is actually done
-		if self.score >= (2500 * self.extraGuyCounter):
+		if self.score >= (8000 * self.extraGuyCounter):
 			ship.lives += 1
 			self.extraGuyCounter += 1
 			
@@ -116,6 +126,7 @@ class Player(pygame.sprite.Sprite):
 			self.respawn = FPS * 2
 			self.cooldown = FPS * 2
 			self.lives -= 1
+			playerDeadSound.play()
 
 class Enemy(pygame.sprite.Sprite):
 	def __init__(self, x, y):
@@ -160,6 +171,7 @@ class Enemy(pygame.sprite.Sprite):
 		else:
 			ship.score += self.points
 			self.kill()
+			enemyDeadSound.play()
 
 	def shotCheck(self):
 		self.cooldown -= 1
@@ -175,6 +187,7 @@ class Enemy(pygame.sprite.Sprite):
 				badShot.color = LIGHTRED
 				badqueue.add(badShot)
 				self.cooldown = FPS / 2
+				enemyShotSound.play()
 
 #pass it a directional value when fired based on the key
 #diagonal directions divide by 1.4 since that's
@@ -351,6 +364,7 @@ def teleporter(self):
 		self.y = random.choice(safey)
 		self.direction = random.choice(('up', 'down', 'left', 'right'))
 		self.teleTime = FPS * 3
+		teleportSound.play()
 	self.findRect()
 
 def tele_draw(self):
@@ -456,6 +470,8 @@ class GameHandler(object):
 			collectScore = False
 		
 		displayScores = True
+		pygame.mixer.music.load(os.path.join('sounds', 'gameover.wav'))
+		pygame.mixer.music.play(-1)
 		while displayScores:
 			for event in pygame.event.get():
 				if event.type == QUIT:
@@ -526,6 +542,7 @@ class GameHandler(object):
 			
 			pygame.display.flip()
 			fpsClock.tick(FPS)
+		pygame.mixer.music.stop()
 
 	def master_loop(self):
 		#the one loop that binds them all
