@@ -5,15 +5,24 @@ until you're out of guys.  Think "Golden Age of Gaming".
 Think Robotron meets Asteroids, but you know, gimpy.
 
 The controls are basic.  The mouse moves the ship in real-time; the 10-key pad 
-fires in 8 directions(5 is nonfunctional).  
+fires in 8 directions(naturally, 5 is right out).  
 
 The bad guys - or 'frunks', I guess - just really don't want you in space, 
 and so move in largely predictable patterns and fire in random directions to 
 make you stop being in space.
 
-This game has been written in Python 2.7 and requires PyGame.
+This game is written in Python 2.7 and requires PyGame.
 
 Present state of things:
+
+12/13/12 - I work at a software company, though I don't code. I used to wonder
+why things took so long to fix.
+
+I guess I don't wonder anymore.
+
+Anyway, added sound!  And structure!  Level is displayed in mid-top of screen
+and both the number of enemies and kinds of movement patterns are influenced by
+it.  It's painfully obvious that there need to be mini-bosses now, but who cares!
 
 07/30/12 - added hi-score list.  uses pickle to dumps/loads data.  keeps input
 more or less sanitized by checking the event.unicode against str.isalnum().

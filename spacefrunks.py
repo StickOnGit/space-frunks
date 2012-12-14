@@ -421,19 +421,20 @@ class GameHandler(object):
 		
 	def level_loop(self):
 		gameOn = True
-		Level = GameLoop(0)
+		difficulty, stage = (0, 0)
+		Level = GameLoop(difficulty, stage)
 		levelCounter = 1
 		while gameOn:
 			#continue to progress based on the
 			#returned value from the game loop:
 			#victory is a True loop, defeat is False
-			nextLevel = Level.play()
+			nextLevel = Level.play(difficulty, stage)
 			if nextLevel:
 				#use divmod() to determine its iteration and difficulty
 				#eventually replace '4' with len(the dict with the levels)
 
 				difficulty, stage = divmod(levelCounter, 4)
-				Level = GameLoop(difficulty)
+				Level = GameLoop(difficulty, stage)
 				levelCounter += 1
 				#print difficulty, stage
 			else:
@@ -555,7 +556,7 @@ class GameHandler(object):
 
 class GameLoop(object):
 
-	def __init__(self, difficulty):
+	def __init__(self, difficulty, stage):
 		self.goodqueue = goodqueue
 		self.badqueue = badqueue
 		self.numberOfBads = 3 + difficulty
@@ -567,11 +568,30 @@ class GameLoop(object):
 			x = random.choice(safex)
 			y = random.choice(safey)
 			enemy = Enemy(x, y)
-			newMovement = random.choice((False, verticalPattern, horizontalSweep, verticalSweep, rammer, teleporter))
-			#newMovement = random.choice ((False, teleporter))
+			#setup the kinds of 'AI' the level can choose from.  levels have a 'base' list
+			#for possible patterns of movement. at higher levels, the results of divmod() are
+			# used to determine the number of enemies (difficulty) and the potential for extra added
+			#types of AI (stage). False means 'don't replace basic AI'
+			
+			if stage == 0:
+				kindsOfAI = [False, False]
+			elif stage == 1:
+				kindsOfAI = [verticalPattern, verticalPattern]
+			elif stage == 2:
+				kindsOfAI = [horizontalSweep, horizontalSweep]
+			elif stage == 3:
+				kindsOfAI = [verticalSweep, verticalSweep]
+			if difficulty >= 2:
+				kindsOfAI.append(teleporter)
+			if difficulty >= 4:
+				kindsOfAI.append(rammer)
+			
+			###newMovement = random.choice((False, verticalPattern, horizontalSweep, verticalSweep, rammer, teleporter))
+			newMovement = random.choice((kindsOfAI))
 			if not newMovement:
 				pass
 			else:
+				#print newMovement
 				enemy.update = types.MethodType(newMovement, enemy)
 			if newMovement == horizontalSweep:
 				enemy.points = 150
@@ -599,7 +619,7 @@ class GameLoop(object):
 			
 
 
-	def play(self):
+	def play(self, difficulty, stage):
 		gameFont = pygame.font.Font('freesansbold.ttf', 18)
 		running = True
 		while running:
@@ -620,9 +640,14 @@ class GameLoop(object):
 			livesSurf = gameFont.render('Lives: %s'%(ship.lives), True, WHITE)
 			livesRect = livesSurf.get_rect()
 			livesRect.topright = ((width - (width / 20)), (height / 20))
+			
+			levelSurf = gameFont.render('Level %d - %d'%(difficulty + 1, stage + 1), True, WHITE)
+			levelRect = levelSurf.get_rect()
+			levelRect.center = ((width / 2), (height / 20))
 
 			DISPLAYSURF.blit(livesSurf, livesRect)
 			DISPLAYSURF.blit(scoreSurf, scoreRect)
+			DISPLAYSURF.blit(levelSurf, levelRect)
 			
 			#now get player events and pass them
 			#to the ship's event handler
