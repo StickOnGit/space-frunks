@@ -100,7 +100,6 @@ class Player(pygame.sprite.Sprite):
 			self.respawn -= 1
 
 		#grants an extra life every X points
-		#set higher once game is actually done
 		if self.score >= (8000 * self.extraGuyCounter):
 			ship.lives += 1
 			self.extraGuyCounter += 1
@@ -189,7 +188,7 @@ class Enemy(pygame.sprite.Sprite):
 				self.cooldown = FPS / 2
 				enemyShotSound.play()
 
-#pass it a directional value when fired based on the key
+#pass it a directional value when fired based on the key.
 #diagonal directions divide by 1.4 since that's
 #close enough to pythagorus for me - makes them move at "the right speed"
 class Bullet(pygame.sprite.Sprite):
@@ -278,11 +277,9 @@ def star_update():
 		star[1] += 1
 
 		if starCounter % 3 == 1:
-			#pass
 			star[1] += 1
 
 		if starCounter % 5 == 1:
-			#pass
 			star[1] += 1
 
 		#when a star goes offscreen, reset it up top
@@ -295,7 +292,7 @@ def star_update():
 #alternative patterns of movement for Enemy()
 #added via strategy patterns, thanks AC
 
-#don't forget to look into decorators
+#don't forget to look into decorators <- i forget what this means
 
 #need to add movement protection to vertPattern and
 #default pattern.  if off the screen they never go anywhere or do anything :P
@@ -421,9 +418,12 @@ class GameHandler(object):
 		
 	def level_loop(self):
 		gameOn = True
-		difficulty, stage = (0, 0)
+		#as levelCounter increments, so too does the stage and difficulty.
+		#negative values are useless, since the game cycles through to the
+		#first level with a nonzero number of badguys.
+		levelCounter = 0
+		difficulty, stage = divmod(levelCounter, 4)
 		Level = GameLoop(difficulty, stage)
-		levelCounter = 1
 		while gameOn:
 			#continue to progress based on the
 			#returned value from the game loop:
@@ -431,17 +431,16 @@ class GameHandler(object):
 			nextLevel = Level.play(difficulty, stage)
 			if nextLevel:
 				#use divmod() to determine its iteration and difficulty
-				#eventually replace '4' with len(the dict with the levels)
-
+				levelCounter += 1
 				difficulty, stage = divmod(levelCounter, 4)
 				Level = GameLoop(difficulty, stage)
-				levelCounter += 1
-				#print difficulty, stage
 			else:
 				gameOn = False
 
 	def game_over_loop(self):
-		#eventually handles hi-scores, when that happens
+		#checks to see if your high score is good enough;
+		#if so, lets you record it
+		#if not, displays older ones
 
 		gameOverFont = pygame.font.Font('freesansbold.ttf', 48)
 		gameOverSurf = gameOverFont.render('GAME OVER', True, GREEN)
@@ -452,7 +451,7 @@ class GameHandler(object):
 		DISPLAYSURF.blit(gameOverSurf, gameOverRect)
 		pygame.display.flip()
 		time.sleep(2)
-		pygame.event.get() #empty event queue
+		pygame.event.get() #this empties event queue
 
 
 		#empty the queues in prep
@@ -482,7 +481,8 @@ class GameHandler(object):
 					#handle keyboard events to allow for the same
 					#loop to both record the score, as well as
 					#kick the user back to the intro screen once
-					#the score entry is over
+					#the score entry is over. use isalnum() to keep
+					#scores 'letters and numbers only'
 					if collectScore:
 						if str(event.unicode).isalnum():
 							scoreString += str(event.unicode).upper()
@@ -495,7 +495,7 @@ class GameHandler(object):
 			star_update()
 			
 			#if collectScore, get the score
-			#if false, iterate over the scoreList and draw the scores
+			#if not CollectScore, iterate over the scoreList and draw the scores
 			
 			if collectScore:
 				#while scoreString is short, display the characters.
@@ -586,12 +586,10 @@ class GameLoop(object):
 			if difficulty >= 4:
 				kindsOfAI.append(rammer)
 			
-			###newMovement = random.choice((False, verticalPattern, horizontalSweep, verticalSweep, rammer, teleporter))
 			newMovement = random.choice((kindsOfAI))
 			if not newMovement:
 				pass
 			else:
-				#print newMovement
 				enemy.update = types.MethodType(newMovement, enemy)
 			if newMovement == horizontalSweep:
 				enemy.points = 150
@@ -659,7 +657,7 @@ class GameLoop(object):
 					ship.event(event)
 
 			#update everything in the queues
-			#should probably hit everyone's
+			#should probably put everyone's
 			#hit detection in update()
 			for thing in self.goodqueue:
 				thing.update()
