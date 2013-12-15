@@ -14,10 +14,10 @@ from pygame.locals import * #should probably get rid of this
 pygame.mixer.pre_init(44100, -16, 2, 2048) # fixes sound lag
 pygame.init()
 
-width = 640
-height = 480
+SCREENWIDTH = 640
+SCREENHEIGHT = 480
 
-DISPLAYSURF = pygame.display.set_mode((width, height))
+DISPLAYSURF = pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
 pygame.display.set_caption('Space Frunks')
 pygame.mouse.set_visible(0)
 
@@ -47,20 +47,27 @@ GAMEFONT = pygame.font.Font('freesansbold.ttf', 24)
 def coinflip():
 	"""Returns either True or False. At random.
 	
-	This is the crux of modern programming, you know.
-	"""
+	This is the crux of modern programming, you know."""
 	return random.choice((True, False))
+	
+def newWordSurfAndRect(wordstring, wordcolor, wordfont=GAMEFONT):
+	"""Returns a font Surface and a font Rect in a tuple.
+	
+	Arguments are: the string it's writing, the color tuple, and the pygame.font.Font object."""
+	wordSurf = wordfont.render(wordstring, True, wordcolor)
+	wordRect = wordSurf.get_rect()
+	return wordSurf, wordRect
 
 class Player(pygame.sprite.Sprite):
 	def __init__(self, x, y):
 		pygame.sprite.Sprite.__init__(self)
 		self.x = x
 		self.y = y
-		self.width = 50
-		self.speed = 3
-		self.height = 25
+		self.ownwidth = 50
+		self.speed = 5
+		self.ownheight = 25
 		self.color = RED
-		self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
+		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
 		self.cooldown = 0
 		self.respawn = 0
 		self.lives = 3
@@ -128,7 +135,7 @@ class Player(pygame.sprite.Sprite):
 		if self.score >= (8000 * self.extraGuyCounter):
 			ship.lives += 1
 			self.extraGuyCounter += 1
-		self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
+		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
 
 	def draw(self):
 		#if not respawning, draw.  if half-way done respawning, flicker
@@ -159,19 +166,19 @@ class Enemy(pygame.sprite.Sprite):
 		self.range = random.randrange(60, 120)
 		self.counter = random.randrange(0, self.range)
 		self.direction = random.choice(('up', 'down', 'left', 'right'))
-		self.minx = x - self.range
-		self.maxx = x + self.range
-		self.miny = y - self.range
-		self.maxy = y + self.range
-		self.width = 15
-		self.height = 15
+		self.ownwidth = 15
+		self.ownheight = 15
 		self.color = BLUE
-		self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
+		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
 		self.speed = 3
 		self.cooldown = FPS / 2
 		self.points = 100
 
 	def update(self):
+		"""Calls all the methods!
+		
+		Really probably any of them *could* be replaced, but .move() and .findRect() are
+		quite important and should probably normally be as-is."""
 		self.shotCheck()
 		self.uniqueAction()
 		self.move()
@@ -198,6 +205,13 @@ class Enemy(pygame.sprite.Sprite):
 			self.counter += 1
 
 	def move(self):
+		"""Calculates the new position for the object.
+		
+		Uses strings to determine which direction to move in, and uses a speed constant to determine
+		how many pixels in a given direction to move. A string representing two directions
+		('upleft' or 'downright' for example) will cause it to divide the speed constant by 1.4 so it
+		does not appear to move faster when traveling diagonally.
+		"""
 		speedConstant = self.speed
 		if len(self.direction) > 5:
 			speedConstant /= 1.4
@@ -211,14 +225,14 @@ class Enemy(pygame.sprite.Sprite):
 			self.x += speedConstant
 		
 	def findRect(self):
-		self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
+		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
 		
 	def draw(self):
 		pygame.draw.rect(DISPLAYSURF, (self.color), (self.rect), 4)
 
 	def got_hit(self):
-		#default collision. checks to see if the collision is just
-		#the player - if so, Enemy ignores it. (Player doesn't)
+		"""Checks to see if the collision is just
+		the player - if so, Enemy ignores it. (Player doesn't)"""
 		if self.rect.colliderect(ship.rect):
 			pass
 		else:
@@ -227,6 +241,10 @@ class Enemy(pygame.sprite.Sprite):
 			enemyDeadSound.play()
 
 	def shotCheck(self):
+		"""Determines when and if the object can attempt to fire.
+		
+		Once obj.cooldown reaches 0, gets a random number between 1 and obj.shotrate. If that number is
+		equal to obj.shotrate, it fires."""
 		self.cooldown -= 1
 		if self.cooldown > 0:
 			pass
@@ -243,17 +261,16 @@ class Enemy(pygame.sprite.Sprite):
 				self.cooldown = FPS / 2
 				enemyShotSound.play()
 
-#pass it a directional value when fired based on the key.
-#diagonal directions divide by 1.4 - makes them move at "the right speed"
 class Bullet(pygame.sprite.Sprite):
+	"""Bullet object. When it hits things, they blows up."""
 	def __init__(self, x, y, direction):
 		pygame.sprite.Sprite.__init__(self)
 		self.x = x
 		self.y = y
 		self.direction = direction
-		self.width = 4
-		self.height = 4
-		self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
+		self.ownwidth = 4
+		self.ownheight = 4
+		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
 		self.speed = 10
 		self.color = GREEN
 
@@ -270,11 +287,11 @@ class Bullet(pygame.sprite.Sprite):
 		if 'right' in self.direction:
 			self.x += speedConstant
 		self.findRect()
-		if self.x < 0 or self.x > DISPLAYSURF.get_width() or self.y < 0 or self.y > DISPLAYSURF.get_height():
+		if self.x < -15 or self.x > SCREENWIDTH + 15 or self.y < -15 or self.y > SCREENHEIGHT + 15:
 			self.kill()
 	
 	def findRect(self):
-		self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
+		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
 	
 	def draw(self):
 		pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 2)
@@ -295,19 +312,18 @@ YELLOW = (255, 255, 0)
 WHITE = (255, 255, 255)
 
 #eventually put this in a better place
-ship = Player(width / 2, height / 2)
+ship = Player(SCREENWIDTH / 2, SCREENHEIGHT / 2)
 goodqueue = pygame.sprite.Group()
 badqueue = pygame.sprite.Group()
 allqueue = pygame.sprite.Group()
-
 
 #stars, cuz we in space
 stars = 50
 starfield = []
 
 for i in range(stars):
-	x = random.randint(0, width)
-	y = random.randint(0, height)
+	x = random.randint(0, SCREENWIDTH)
+	y = random.randint(0, SCREENHEIGHT)
 	starfield.append([x, y])
 
 def star_update():
@@ -326,87 +342,42 @@ def star_update():
 			star[1] += 1
 			starcolor = (240, 220, 220)
 	#when a star goes offscreen, reset it up top
-		if star[1] > height:
+		if star[1] > SCREENHEIGHT:
 			star[1] = 0
-			x = random.randint(0, width)
+			x = random.randint(0, SCREENWIDTH)
 			star[0] = x
 		DISPLAYSURF.set_at((x, y), starcolor)
 
-#alternative patterns of movement for Enemy()
-#added via strategy patterns, thanks AC
+#alternative patterns of movement for Enemy() added via strategy patterns, thanks AC
 
-#need to add movement protection to vertPattern and
-#default pattern.  if off the screen they never go anywhere or do anything :P
-
-def verticalPattern(self):
-	self.shotCheck()
-	self.y += self.speed
-	if self.y > self.maxy:
-		self.speed *= -1
-	elif self.y < self.miny:
-		self.speed *= -1
-	self.findRect()
-
-def horizontalSweep(self):
-	self.shotCheck()
-	self.x += self.speed
-	if self.x > width + 30:
-		self.y = random.randrange (25, (height - 25))
-		self.x = -20
-	if self.x < -30:
-		self.y = random.randrange (25, (height - 25))
-		self.x = width + 20
-	self.findRect()
-	
 def newSweeper(self):
-	if self.x > width + 30:
-		self.y = random.randrange (25, (height - 25))
+	"""Ignores enemy.counter and simply allows the enemy to follow a straight line.
+	
+	If it goes too far out of bounds, gives it a new random position on the axis of
+	the boundary it didn't exit (if not x, y: if not y, x) and moves it to the opposite end
+	of the screen."""
+	if self.x > SCREENWIDTH + 30:
+		self.y = random.randrange(25, (SCREENHEIGHT - 25))
 		self.x = -20
 	if self.x < -30:
-		self.y = random.randrange (25, (height - 25))
-		self.x = width + 20
-
-def verticalSweep(self):
-	self.shotCheck()
-	self.y += self.speed
-	if self.y > height + 30:
-		self.x = random.randrange (25, (width - 25))
+		self.y = random.randrange(25, (SCREENHEIGHT - 25))
+		self.x = SCREENWIDTH + 20
+	if self.y > SCREENHEIGHT + 30:
+		self.x = random.randrange(25, (SCREENHEIGHT - 25))
 		self.y = -20
 	if self.y < -30:
-		self.x = random.randrange (25, (width - 25))
-		self.y = height + 20
-	self.findRect()
-
-def rammer(self):
-	seekx, seeky = ship.rect.center
-	speedConst = self.speed
-	if seekx != self.x and seeky != self.y:
-		speedConst /= 1.4
-	if not ship.respawn:
-		if seekx > self.x:
-			#self.x += self.speed
-			self.x += speedConst
-		if seekx < self.x:
-			#self.x -= self.speed
-			self.x -= speedConst
-		if seeky > self.y:
-			#self.y += self.speed
-			self.y += speedConst
-		if seeky < self.y:
-			#self.y -= self.speed
-			self.y -= speedConst
-	self.findRect()
+		self.x = random.randrange(25, (SCREENHEIGHT - 25))
+		self.y = SCREENHEIGHT + 20
 	
 def newRammer(self):
 	"""Compares its x and y coordinates against the target and moves toward it.
 
 	If the ship is respawning, the target is its own x and y of origin - it retreats.
-	If the ship is NOT respawning, the ship is of course the target.
-	"""
+	If the ship is NOT respawning, the ship is of course the target."""
 	self.cooldown = 5 #placeholder, keeps it from seeking AND shooting
 	selfx, selfy = self.rect.center
 	seekX, seekY = self.xy if ship.respawn else ship.rect.center
-	newDirection = ''
+	newDirection = '' #this can safely be assigned to self.direction; it simply won't do anything.
 	if seekY > selfy:
 		newDirection += 'down'
 	elif seekY < selfy:
@@ -420,34 +391,36 @@ def newRammer(self):
 	else:
 		pass
 	self.direction = newDirection
+	
+def newTeleport(self):
+	"""This replaces uniqueAction.
 
-def teleporter(self):
-	self.teleTime -= 1
-	if self.teleTime > 0:
-		self.shotCheck()
-		if self.direction == 'left':
-			self.x -= self.speed
-		elif self.direction == 'right':
-			self.x += self.speed
-		elif self.direction == 'up':
-			self.y -= self.speed
-		elif self.direction == 'down':
-			self.y += self.speed
-	else:
-		shipX, shipY = int(ship.x), int(ship.y)
-		safex = range(10, (shipX - 55)) + range((shipX + 55), (width - 10))
-		safey = range(10, (shipY - 55)) + range((shipY + 55), (height - 10))
+	Uses enemy.counter to countdown a teleport. When the timer reaches 0 (or less), 
+	a new position and direction for enemy is chosen and the counter is reset to
+	FPS * 3 -- in other words, it should wait 3 seconds before attempting to teleport again.
+	
+	This should be used in concert with newTeleDraw() which replaces enemy.draw() to achieve
+	a flickering effect before transport."""
+	self.counter -= 1
+	if self.counter <= 0:
+		shipX, shipY = [int(x) for x in ship.rect.center]
+		safex = range(10, (shipX - 55)) + range((shipX + 55), (SCREENWIDTH - 10))
+		safey = range(10, (shipY - 55)) + range((shipY + 55), (SCREENHEIGHT - 10))
 		self.x = random.choice(safex)
 		self.y = random.choice(safey)
 		self.direction = random.choice(('up', 'down', 'left', 'right'))
-		self.teleTime = FPS * 3
+		self.counter = FPS * 3
 		teleportSound.play()
-	self.findRect()
-
-def tele_draw(self):
-	if self.teleTime in range((FPS / 2), (FPS * 2)):
+		
+def newTeleDraw(self):
+	"""Used in concert with newTeleport() to create a teleporter.
+	
+	At present, the draw method needs to be altered to create the "blink" effect of the
+	enemy teleporting to a new location, so both uniqueAction() AND draw() need to be
+	replaced. This might change later, since it's kind of dumb."""
+	if self.counter in range((FPS / 2), (FPS * 2)):
 		pygame.draw.rect(DISPLAYSURF, self.color, self.rect, 3)
-	elif self.teleTime % 5:
+	elif self.counter % 5:
 		pygame.draw.rect(DISPLAYSURF, self.color, self.rect, 3)
 	else:
 		pass
@@ -457,18 +430,15 @@ class GameHandler(object):
 
 	def __init__(self):
 		pass
-		
 	def intro_loop(self):
 		#intro screen
 		titleFont = pygame.font.Font('freesansbold.ttf', 32)
-		titleSurf = titleFont.render('Space Frunks', True, GREEN)
-		titleRect = titleSurf.get_rect()
-		titleRect.center = (width / 2, (height / 2) - 100)
+		titleSurf, titleRect = newWordSurfAndRect('Space Frunks', GREEN, titleFont)
+		titleRect.center = (SCREENWIDTH / 2, (SCREENHEIGHT / 2) - 100)
 
 		menuFont = pygame.font.Font('freesansbold.ttf', 16)
-		menuSurf = menuFont.render('Press any key to play', True, GREEN)
-		menuRect = menuSurf.get_rect()
-		menuRect.center = (width / 2, (height / 2) + 100)
+		menuSurf, menuRect = newWordSurfAndRect('Press any key to play', GREEN, menuFont)
+		menuRect.center = (SCREENWIDTH / 2, (SCREENHEIGHT / 2) + 100)
 
 		waiting = True
 		while waiting:
@@ -483,7 +453,7 @@ class GameHandler(object):
 					sys.exit()
 				elif event.type == KEYDOWN:
 					#prepare ship for new game (can this be ship.__init__() ? )
-					pygame.mouse.set_pos([width / 2, height / 2])
+					pygame.mouse.set_pos([SCREENWIDTH / 2, SCREENHEIGHT / 2])
 					ship.lives = 3
 					ship.cooldown = 0
 					ship.respawn = 0
@@ -496,18 +466,18 @@ class GameHandler(object):
 			pygame.display.flip()
 			fpsClock.tick(FPS)
 
-		
 	def level_loop(self):
+		"""Determines the difficulty of the next level, and whether or not the game has ended or
+		progressed.
+		
+		As levelCounter increments, so too does the stage and difficulty.
+		Negative values are useless, since the game cycles through to the first level with
+		a nonzero number of badguys."""
 		gameOn = True
-		#as levelCounter increments, so too does the stage and difficulty.
-		#negative values are useless, since the game cycles through to the
-		#first level with a nonzero number of badguys.
 		levelCounter = 0
 		difficulty, stage = divmod(levelCounter, 4)
 		Level = GameLoop(difficulty, stage)
 		while gameOn:
-			#continue to progress based on the returned value from the game loop:
-			#victory is a True loop, defeat is False
 			nextLevel = Level.play(difficulty, stage)
 			if nextLevel:
 				#use divmod() to determine its iteration and difficulty
@@ -519,13 +489,9 @@ class GameHandler(object):
 
 	def game_over_loop(self):
 		#checks to see if your high score is good enough;
-		#if so, lets you record it
-		#if not, displays older ones
-
-		gameOverFont = pygame.font.Font('freesansbold.ttf', 48)
-		gameOverSurf = gameOverFont.render('GAME OVER', True, GREEN)
-		gameOverRect = gameOverSurf.get_rect()
-		gameOverRect.center = (width / 2, height / 2)
+		#if so, lets you record it - if not, displays older ones
+		gameOverSurf, gameOverRect = newWordSurfAndRect('GAME OVER', GREEN)
+		gameOverRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
 
 		DISPLAYSURF.blit(gameOverSurf, gameOverRect)
 		pygame.display.flip()
@@ -538,10 +504,9 @@ class GameHandler(object):
 		#set scoreString to empty in case of input.
 		#set a bool if ship.score is high enough
 		scoreString = ''
+		collectScore = False
 		if ship.score > scoreList[-1][1]:
 			collectScore = True
-		else:
-			collectScore = False
 		
 		displayScores = True
 		pygame.mixer.music.load(os.path.join('sounds', 'gameover.wav'))
@@ -564,13 +529,10 @@ class GameHandler(object):
 							pass
 					else:
 						displayScores = False
-			
 			DISPLAYSURF.fill(BLACK)
 			star_update()
-			
 			#if collectScore, get the score
 			#if not CollectScore, iterate over the scoreList and draw the scores
-			
 			if collectScore:
 				#while scoreString is short, display the characters.
 				#once it gets to be 3 characters long, add it to the
@@ -578,19 +540,16 @@ class GameHandler(object):
 				#and pop off any scores that are beyond the fifth score.
 				#then pickle and save. only saves if a new score is actually added.
 				if len(scoreString) < 3:
-					congratsObj = GAMEFONT.render('High score!  Enter your name, frunk destroyer.', True, GREEN)
-					congratsRect = congratsObj.get_rect()
-					congratsRect.center = (width / 2, height / 10)
-					newScoreObj = GAMEFONT.render(scoreString, True, WHITE)
-					newScoreRect = newScoreObj.get_rect()
-					newScoreRect.center = (height / 2, width / 2)
+					congratsObj, congratsRect = newWordSurfAndRect('High score!  Enter your name, frunk destroyer.', GREEN)
+					congratsRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 10)
+					newScoreObj, newScoreRect = newWordSurfAndRect(scoreString, WHITE)
+					newScoreRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
 					
 					DISPLAYSURF.blit(congratsObj, congratsRect)
 					try:
 						DISPLAYSURF.blit(newScoreObj, newScoreRect)
 					except:
-						pass
-						#why is this try/except? hm cant remember
+						pass	#why is this a try/except? hm cant remember
 				else:
 					scoreList.append([scoreString, ship.score])
 					scoreList.sort(key=lambda x: x[1])
@@ -605,17 +564,14 @@ class GameHandler(object):
 			else:
 				totalScores = 1
 				for name, score in scoreList:
-					nameSurf = GAMEFONT.render(name, True, GREEN)
-					nameRect = nameSurf.get_rect()
-					nameRect.center = (width / 3, (width/8) * totalScores)
-					scoreSurf = GAMEFONT.render(str(score), True, GREEN)
-					scoreRect = scoreSurf.get_rect()
-					scoreRect.center = (2*(width / 3), (width/8) * totalScores)
+					nameSurf, nameRect = newWordSurfAndRect(name, GREEN, GAMEFONT)
+					nameRect.center = (SCREENWIDTH / 3, (SCREENWIDTH / 8) * totalScores)
+					scoreSurf, scoreRect = newWordSurfAndRect(str(score), GREEN, GAMEFONT)
+					scoreRect.center = (2*(SCREENWIDTH / 3), (SCREENWIDTH / 8) * totalScores)
 		
 					DISPLAYSURF.blit(nameSurf, nameRect)
 					DISPLAYSURF.blit(scoreSurf, scoreRect)
 					totalScores += 1
-			
 			pygame.display.flip()
 			fpsClock.tick(FPS)
 		pygame.mixer.music.stop()
@@ -635,102 +591,90 @@ class GameLoop(object):
 		self.badqueue = badqueue
 		self.allqueue = allqueue
 		self.enemiesInLevel = 3 + difficulty
-		#need integers for ship x/y coords because range() only takes ints
-		shipX, shipY = int(ship.x), int(ship.y)
-		#this is the enemy generator
+		shipX, shipY = int(ship.x), int(ship.y) #need integers because range() only takes ints
+		possibleAI = {
+					0:[False, False],
+					1:[False, False],
+					2:[newSweeper, newSweeper],
+					3:[newSweeper, newSweeper]
+					} #the kinds of 'AI' the level can choose from.
+		kindsOfAI = possibleAI[stage]
+		if difficulty >= 2:
+			kindsOfAI.append(newTeleport)
+		if difficulty >= 4:
+			kindsOfAI.append(newRammer)
 		i = 0
 		while i < self.enemiesInLevel:
-			safex = range(10, (shipX - 25)) + range((shipX + 25), (width - 10))
-			safey = range(10, (shipY - 25)) + range((shipY + 25), (height - 10))
+			safex = range(10, (shipX - 25)) + range((shipX + 25), (SCREENWIDTH - 10))
+			safey = range(10, (shipY - 25)) + range((shipY + 25), (SCREENHEIGHT - 10))
 			x = random.choice(safex)
 			y = random.choice(safey)
 			enemy = Enemy(x, y)
-			#setup the kinds of 'AI' the level can choose from.  levels have a 'base' list
-			#for possible patterns of movement. at higher levels, the results of divmod() are
-			# used to determine the number of enemies (difficulty) and the potential for extra added
-			#types of AI (stage). False means 'don't replace basic AI'
-			
-			if stage == 0:
-				kindsOfAI = [False, False]
-			elif stage == 1:
-				kindsOfAI = [verticalPattern, verticalPattern]
-			elif stage == 2:
-				kindsOfAI = [newSweeper, newSweeper]
-			elif stage == 3:
-				kindsOfAI = [verticalSweep, verticalSweep]
-			if difficulty >= 2:
-				kindsOfAI.append(teleporter)
-			if difficulty >= 4:
-				kindsOfAI.append(newRammer)
 			for tick in range (0, difficulty):
-				enemy.speed *= 1.05
-			
+				if coinflip():
+					enemy.speed *= 1.05
 			newMovement = random.choice((kindsOfAI))
-			#newMovement = newRammer
 			if not newMovement:
 				pass
-			elif newMovement == newSweeper or newMovement == newRammer:
-				enemy.uniqueAction = types.MethodType(newMovement, enemy)	
 			else:
-				enemy.update = types.MethodType(newMovement, enemy)
+				enemy.uniqueAction = types.MethodType(newMovement, enemy)
 			if newMovement == newSweeper:
-				enemy.points = 150
-				enemy.color = GREEN
-			elif newMovement == verticalSweep:
 				enemy.points = 150
 				enemy.color = YELLOW
 			elif newMovement == newRammer:
 				enemy.points = 200
 				enemy.color = PURPLE
 				enemy.speed = 2
-			elif newMovement == teleporter:
+			elif newMovement == newTeleport:
 				enemy.points = 300
-				enemy.teleTime = random.randrange(FPS / 2, FPS * 3)
 				enemy.speed = 2
-				enemy.direction = random.choice(('up', 'down', 'left', 'right'))
-				enemy.draw = types.MethodType(tele_draw, enemy)
+				enemy.color = GREEN
+				enemy.draw = types.MethodType(newTeleDraw, enemy)
 			self.badqueue.add(enemy)
 			self.allqueue.add(enemy)
 			i += 1
 
 	def play(self, difficulty, stage):
 		statsFont = pygame.font.Font('freesansbold.ttf', 18)
+		
+		scoreSurf, scoreRect = newWordSurfAndRect('Score:', WHITE, statsFont)
+		scoreRect.topleft = ((SCREENWIDTH / 20), (SCREENHEIGHT / 20))
+
+		livesSurf, livesRect = newWordSurfAndRect('Lives:', WHITE, statsFont)
+		livesRect.topright = ((SCREENWIDTH - (SCREENWIDTH / 19)), (SCREENHEIGHT / 20))
+		
+		levelSurf, levelRect = newWordSurfAndRect('Level %d - %d'%(difficulty + 1, stage + 1), WHITE, statsFont)
+		levelRect.center = ((SCREENWIDTH / 2), (SCREENHEIGHT / 20))
 		running = True
 		while running:
+			scoreNumSurf, scoreNumRect = newWordSurfAndRect(str(ship.score), WHITE, statsFont)
+			scoreNumRect.topleft = (scoreRect.topright[0] + 5, scoreRect.topright[1])
+			
+			livesNumSurf, livesNumRect = newWordSurfAndRect(str(ship.lives), WHITE, statsFont)
+			livesNumRect.topleft = (livesRect.topright[0] + 5, livesRect.topright[1])
+			blitqueue = [
+						(livesSurf, livesRect),
+						(livesNumSurf, livesNumRect),
+						(scoreSurf, scoreRect),
+						(scoreNumSurf, scoreNumRect),
+						(levelSurf, levelRect)
+						]
+
 			DISPLAYSURF.fill(BLACK)
-			#advance stars, then draw everything in the allqueue
 			star_update()
 			for thing in self.allqueue:
 				thing.draw()
-
-			#draw the score and ship lives
-			scoreSurf = statsFont.render('Score: %s'%(ship.score), True, WHITE)
-			scoreRect = scoreSurf.get_rect()
-			scoreRect.topleft = ((width / 20), (height / 20))
-
-			livesSurf = statsFont.render('Lives: %s'%(ship.lives), True, WHITE)
-			livesRect = livesSurf.get_rect()
-			livesRect.topright = ((width - (width / 20)), (height / 20))
-			
-			levelSurf = statsFont.render('Level %d - %d'%(difficulty + 1, stage + 1), True, WHITE)
-			levelRect = levelSurf.get_rect()
-			levelRect.center = ((width / 2), (height / 20))
-
-			DISPLAYSURF.blit(livesSurf, livesRect)
-			DISPLAYSURF.blit(scoreSurf, scoreRect)
-			DISPLAYSURF.blit(levelSurf, levelRect)
-			
-			#get player events and pass them
-			#to the ship's event handler
+			for blitdata in blitqueue:
+				DISPLAYSURF.blit(blitdata[0], blitdata[1])
+			#get player events and pass them to the ship's event handler
 			for event in pygame.event.get():
 				if event.type == QUIT:
 					pygame.quit()
 					sys.exit()
 				elif event.type == KEYDOWN:
 					ship.eventHandle(event)
-			#update everything, and check for collisions.
-			#the only collisions we care about are "good guy" ones - bad guys
-			#get all the luck, it seems
+			#update everything, and check for collisions. the only collisions we care about 
+			#are "good guy" ones - bad guys get all the luck, it seems
 			for thing in self.allqueue:
 				thing.update()
 				thing_hit_list = pygame.sprite.spritecollide(thing, self.allqueue, False)
@@ -741,17 +685,15 @@ class GameLoop(object):
 						if otherthing in self.badqueue:
 							thing.got_hit()
 							otherthing.got_hit()
-				
+
 			if not ship.lives:
 				#return False to go to gameover
 				running = False
 				return False
-
 			if not self.badqueue:
 				#return True to generate new level
 				running = False
-				return True		
-		
+				return True
 			pygame.display.flip()
 			fpsClock.tick(FPS)
 
