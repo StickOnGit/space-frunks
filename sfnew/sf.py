@@ -11,18 +11,30 @@ except:
 
 from pygame.locals import * #should probably get rid of this
 
-pygame.mixer.pre_init(44100, -16, 2, 2048) # fixes sound lag
+pygame.mixer.pre_init(44100, -16, 2, 2048) #fixes sound lag
 pygame.init()
 
+#global variables and syntactic sugar
 SCREENWIDTH = 640
 SCREENHEIGHT = 480
+GAMEFONT = pygame.font.Font('freesansbold.ttf', 24)
+FPS = 60
+fpsClock = pygame.time.Clock()
+
+RED = (255, 0, 0)
+LIGHTRED = (255, 100, 100)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+PURPLE = (128, 0, 128)
+BLACK = (0, 0, 0)
+YELLOW = (255, 255, 0)
+WHITE = (255, 255, 255)
 
 DISPLAYSURF = pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
 pygame.display.set_caption('Space Frunks')
 pygame.mouse.set_visible(0)
 
-#attempts to load high scores.  if it cannot,
-#creates new 'default' scoreList (not saved to file yet)
+#tries to load hiscores. if exception, creates a default hiscore list
 try:
 	f = open('scores.py', 'r')
 	rawScoreList = f.read()
@@ -31,23 +43,13 @@ try:
 except:
 	scoreList = [['NME', 15000], ['HAS', 12000], ['LDS', 10000], ['AKT', 8000], ['JTD', 5000]]
 
-#loads sounds
-enemyDeadSound = pygame.mixer.Sound(os.path.join('sounds', 'enemydead.wav'))
-playerDeadSound = pygame.mixer.Sound(os.path.join('sounds', 'playerdead.wav'))
-teleportSound = pygame.mixer.Sound(os.path.join('sounds', 'teleport.wav'))
-enemyShotSound = pygame.mixer.Sound(os.path.join('sounds', 'enemyshot.wav'))
-playerShotSound = pygame.mixer.Sound(os.path.join('sounds', 'playershot.wav'))
-
-#don't forget the gameOver music... it's handled differently
+#helpful standalone functions that just don't go anywhere in particular yet
+def loadSound(pathToSound, fileName):
+	"""Loads a sound file from a path relative to the main module's location."""
+	return pygame.mixer.Sound(os.path.join(pathToSound, fileName))
 	
-#should probably put the constant variables and syntactic sugar up here
-GAMEFONT = pygame.font.Font('freesansbold.ttf', 24)
-
-#because it needs to go SOMEWHERE
 def coinflip():
-	"""Returns either True or False. At random.
-	
-	This is the crux of modern programming, you know."""
+	"""Randomly returns either True or False."""
 	return random.choice((True, False))
 	
 def newWordSurfAndRect(wordstring, wordcolor, wordfont=GAMEFONT):
@@ -58,6 +60,15 @@ def newWordSurfAndRect(wordstring, wordcolor, wordfont=GAMEFONT):
 	wordRect = wordSurf.get_rect()
 	return wordSurf, wordRect
 
+#loads sounds
+enemyDeadSound = loadSound('sounds', 'enemydead.wav')
+playerDeadSound = loadSound('sounds', 'playerdead.wav')
+teleportSound = loadSound('sounds', 'teleport.wav')
+enemyShotSound = loadSound('sounds', 'enemyshot.wav')
+playerShotSound = loadSound('sounds', 'playershot.wav')
+
+#don't load gameOver music... it's handled differently
+	
 class Player(pygame.sprite.Sprite):
 	def __init__(self, x, y):
 		pygame.sprite.Sprite.__init__(self)
@@ -110,7 +121,11 @@ class Player(pygame.sprite.Sprite):
 				playerShotSound.play()
 
 	def update(self):
-		#updates ship coordinates
+		"""Updates ship coordinates. Gets the difference between ship's current x and y position
+		and the mouse's current x and y position; if the difference is less than ship.speed,
+		it moves right to that spot. Else, just moves at a constant rate towards the mouse.
+		
+		Also checks to ensure its points are sufficient to grant an extra life."""
 		mouseX, mouseY = pygame.mouse.get_pos()
 		deltaX, deltaY = abs(self.x - mouseX), abs(self.y - mouseY)
 		xDirect = 1 if mouseX >= self.x else -1
@@ -138,7 +153,8 @@ class Player(pygame.sprite.Sprite):
 		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
 
 	def draw(self):
-		#if not respawning, draw.  if half-way done respawning, flicker
+		"""Hook for the controller's draw() call.
+		If not respawning, draw. If half-way done respawning, flicker"""
 		if not self.respawn:
 			pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 3)
 		elif self.respawn <= FPS and (self.respawn % 5):
@@ -147,7 +163,8 @@ class Player(pygame.sprite.Sprite):
 			pass
 
 	def got_hit(self):
-	#checks for "respawn invincibility" before doing anything
+		"""Hook for controller's got_hit() call. Handles killing the ship and losing a life.
+		If the ship is respawning, this does nothing - respawn invulnerability!"""
 		if self.respawn > 0:
 			pass
 		else:
@@ -179,8 +196,8 @@ class Enemy(pygame.sprite.Sprite):
 		
 		Really probably any of them *could* be replaced, but .move() and .findRect() are
 		quite important and should probably normally be as-is."""
-		self.shotCheck()
 		self.uniqueAction()
+		self.shotCheck()
 		self.move()
 		self.findRect()
 	
@@ -298,18 +315,6 @@ class Bullet(pygame.sprite.Sprite):
 
 	def got_hit(self):
 		self.kill()
-
-FPS = 60
-fpsClock = pygame.time.Clock()
-
-RED = (255, 0, 0)
-LIGHTRED = (255, 100, 100)
-GREEN = (0, 255, 0)
-BLUE = (0, 0, 255)
-PURPLE = (128, 0, 128)
-BLACK = (0, 0, 0)
-YELLOW = (255, 255, 0)
-WHITE = (255, 255, 255)
 
 #eventually put this in a better place
 ship = Player(SCREENWIDTH / 2, SCREENHEIGHT / 2)
