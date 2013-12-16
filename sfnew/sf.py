@@ -55,10 +55,22 @@ def coinflip():
 def newWordSurfAndRect(wordstring, wordcolor, wordfont=GAMEFONT):
 	"""Returns a font Surface and a font Rect in a tuple.
 	
-	Arguments are: the string it's writing, the color tuple, and the pygame.font.Font object."""
+	Arguments are: the string it's writing, the color tuple, and (optionally)the pygame.font.Font object."""
 	wordSurf = wordfont.render(wordstring, True, wordcolor)
 	wordRect = wordSurf.get_rect()
 	return wordSurf, wordRect
+	
+def isOutOfBounds(objRect, offset=15):
+	"""Takes a tuple and checks that it is within a certain range. Used to see if an object has gone too far
+	off the screen."""
+	try:
+		objX, objY = objRect
+	except:
+		raise ValueError("isOutOfBounds got something other than a two-value tuple.")
+	if objX < offset * -1 or objX > SCREENWIDTH + offset or objY < offset * -1 or objY > SCREENHEIGHT + offset:
+		return True
+	else:
+		return False
 
 #loads sounds
 enemyDeadSound = loadSound('sounds', 'enemydead.wav')
@@ -82,6 +94,16 @@ class Player(pygame.sprite.Sprite):
 		self.cooldown = 0
 		self.respawn = 0
 		self.lives = 3
+		self.score = 0
+		self.extraGuyCounter = 1
+		
+	def newGamePrep(self):
+		"""Gets the ship ready for a new game.
+		
+		Has static values for now, might change this to use variable values."""
+		self.lives = 3
+		self.cooldown = 0
+		self.respawn = 0
 		self.score = 0
 		self.extraGuyCounter = 1
 
@@ -125,7 +147,8 @@ class Player(pygame.sprite.Sprite):
 		and the mouse's current x and y position; if the difference is less than ship.speed,
 		it moves right to that spot. Else, just moves at a constant rate towards the mouse.
 		
-		Also checks to ensure its points are sufficient to grant an extra life."""
+		Also counts down weapon cooldown, respawn (if needed), and checks to see if its point total
+		grants it an extra life."""
 		mouseX, mouseY = pygame.mouse.get_pos()
 		deltaX, deltaY = abs(self.x - mouseX), abs(self.y - mouseY)
 		xDirect = 1 if mouseX >= self.x else -1
@@ -141,13 +164,9 @@ class Player(pygame.sprite.Sprite):
 			self.y = mouseY
 		else:
 			self.y += (self.speed * yDirect)
-
-		if self.cooldown > 0:
-			self.cooldown -= 1
-		if self.respawn > 0:
-			self.respawn -= 1
-		#grants an extra life every X points
-		if self.score >= (8000 * self.extraGuyCounter):
+		self.cooldown -= 1 if self.cooldown > 0 else 0
+		self.respawn -= 1 if self.respawn > 0 else 0
+		if self.score >= (8000 * self.extraGuyCounter):	#grants an extra life every X points
 			ship.lives += 1
 			self.extraGuyCounter += 1
 		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
@@ -206,7 +225,7 @@ class Enemy(pygame.sprite.Sprite):
 		
 		This default action is to increment self.counter until it exceeds self.range.
 		When it does, reverse direction."""
-		if self.counter >= self.range:
+		if self.counter >= self.range or isOutOfBounds((self.x, self.y)):
 			self.counter = 0
 			newDirection = ''
 			if 'up' in self.direction:
@@ -304,9 +323,9 @@ class Bullet(pygame.sprite.Sprite):
 		if 'right' in self.direction:
 			self.x += speedConstant
 		self.findRect()
-		if self.x < -15 or self.x > SCREENWIDTH + 15 or self.y < -15 or self.y > SCREENHEIGHT + 15:
+		if isOutOfBounds((self.x, self.y)):
 			self.kill()
-	
+
 	def findRect(self):
 		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
 	
@@ -322,36 +341,44 @@ goodqueue = pygame.sprite.Group()
 badqueue = pygame.sprite.Group()
 allqueue = pygame.sprite.Group()
 
-#stars, cuz we in space
-stars = 50
-starfield = []
-
-for i in range(stars):
-	x = random.randint(0, SCREENWIDTH)
-	y = random.randint(0, SCREENHEIGHT)
-	starfield.append([x, y])
-
-def star_update():
-	starCounter = 0
-	for star in starfield:
-		starCounter += 1
-		x, y = star
-		#parallax star effect - now with fancy 'faded' effect for faraway stars
-		star[1] += 1
-		starcolor = (120, 70, 70)
+class Starfield(object):
+	"""A starfield background."""
+	def __init__(self, stars=50):
+		self.stars = stars
+		self.starfield = []
+		self.addStars()
 		
-		if starCounter % 3 == 1:
-			star[1] += 1
-			starcolor = (180, 100, 100)
-		if starCounter % 5 == 1:
-			star[1] += 1
-			starcolor = (240, 220, 220)
-	#when a star goes offscreen, reset it up top
-		if star[1] > SCREENHEIGHT:
-			star[1] = 0
+	def addStars(self, stars='_default'):
+		if stars is '_default':
+			stars = self.stars
+		for i in range(stars):
 			x = random.randint(0, SCREENWIDTH)
-			star[0] = x
-		DISPLAYSURF.set_at((x, y), starcolor)
+			y = random.randint(0, SCREENHEIGHT)
+			self.starfield.append([x, y])
+
+	def update(self):
+		starCounter = 0
+		for star in self.starfield:
+			starCounter += 1
+			x, y = star
+			#parallax star effect - now with fancy 'faded' effect for faraway stars
+			star[1] += 1
+			starcolor = (120, 70, 70)
+
+			if starCounter % 3 == 1:
+				star[1] += 1
+				starcolor = (180, 100, 100)
+			if starCounter % 5 == 1:
+				star[1] += 1
+				starcolor = (240, 220, 220)
+		#when a star goes offscreen, reset it up top
+			if star[1] > SCREENHEIGHT:
+				star[1] = 0
+				x = random.randint(0, SCREENWIDTH)
+				star[0] = x
+			DISPLAYSURF.set_at((x, y), starcolor)
+			
+STARFIELDBG = Starfield()
 
 #alternative patterns of movement for Enemy() added via strategy patterns, thanks AC
 
@@ -436,7 +463,8 @@ class GameHandler(object):
 	def __init__(self):
 		pass
 	def intro_loop(self):
-		#intro screen
+		"""Establishes the text in the intro screen and waits for the user to initialize
+		a new game with the old 'Press Any Key' trick."""
 		titleFont = pygame.font.Font('freesansbold.ttf', 32)
 		titleSurf, titleRect = newWordSurfAndRect('Space Frunks', GREEN, titleFont)
 		titleRect.center = (SCREENWIDTH / 2, (SCREENHEIGHT / 2) - 100)
@@ -448,7 +476,7 @@ class GameHandler(object):
 		waiting = True
 		while waiting:
 			DISPLAYSURF.fill(BLACK)
-			star_update()
+			STARFIELDBG.update()
 			DISPLAYSURF.blit(titleSurf, titleRect)
 			DISPLAYSURF.blit(menuSurf, menuRect)
 			
@@ -456,18 +484,12 @@ class GameHandler(object):
 				if event.type == QUIT:
 					pygame.quit()
 					sys.exit()
-				elif event.type == KEYDOWN:
-					#prepare ship for new game (can this be ship.__init__() ? )
+				elif event.type == KEYDOWN: #prepare for new game
 					pygame.mouse.set_pos([SCREENWIDTH / 2, SCREENHEIGHT / 2])
-					ship.lives = 3
-					ship.cooldown = 0
-					ship.respawn = 0
-					ship.score = 0
-					ship.extraGuyCounter = 1
+					ship.newGamePrep()
 					goodqueue.add(ship)
 					allqueue.add(ship)
 					waiting = False
-
 			pygame.display.flip()
 			fpsClock.tick(FPS)
 
@@ -484,8 +506,7 @@ class GameHandler(object):
 		Level = GameLoop(difficulty, stage)
 		while gameOn:
 			nextLevel = Level.play(difficulty, stage)
-			if nextLevel:
-				#use divmod() to determine its iteration and difficulty
+			if nextLevel: #use divmod() to determine next level's iteration and difficulty
 				levelCounter += 1
 				difficulty, stage = divmod(levelCounter, 4)
 				Level = GameLoop(difficulty, stage)
@@ -501,18 +522,15 @@ class GameHandler(object):
 		DISPLAYSURF.blit(gameOverSurf, gameOverRect)
 		pygame.display.flip()
 		time.sleep(2)
-		pygame.event.get() #this empties event queue
-
+		pygame.event.get() #get() empties event queue
 		for thing in allqueue:
 			thing.kill()
-		
 		#set scoreString to empty in case of input.
 		#set a bool if ship.score is high enough
 		scoreString = ''
 		collectScore = False
 		if ship.score > scoreList[-1][1]:
 			collectScore = True
-		
 		displayScores = True
 		pygame.mixer.music.load(os.path.join('sounds', 'gameover.wav'))
 		pygame.mixer.music.play(-1)
@@ -535,7 +553,7 @@ class GameHandler(object):
 					else:
 						displayScores = False
 			DISPLAYSURF.fill(BLACK)
-			star_update()
+			STARFIELDBG.update()
 			#if collectScore, get the score
 			#if not CollectScore, iterate over the scoreList and draw the scores
 			if collectScore:
@@ -581,8 +599,7 @@ class GameHandler(object):
 			fpsClock.tick(FPS)
 		pygame.mixer.music.stop()
 
-	def master_loop(self):
-		#the one loop that binds them all
+	def master_loop(self):		#the one loop that binds them all
 		while True:
 			self.intro_loop()
 			self.level_loop()
@@ -647,7 +664,7 @@ class GameLoop(object):
 
 		livesSurf, livesRect = newWordSurfAndRect('Lives:', WHITE, statsFont)
 		livesRect.topright = ((SCREENWIDTH - (SCREENWIDTH / 19)), (SCREENHEIGHT / 20))
-		
+		#passing level here is fine, it doesn't change during gameplay without creating new Level object
 		levelSurf, levelRect = newWordSurfAndRect('Level %d - %d'%(difficulty + 1, stage + 1), WHITE, statsFont)
 		levelRect.center = ((SCREENWIDTH / 2), (SCREENHEIGHT / 20))
 		running = True
@@ -666,37 +683,32 @@ class GameLoop(object):
 						]
 
 			DISPLAYSURF.fill(BLACK)
-			star_update()
+			STARFIELDBG.update()
 			for thing in self.allqueue:
 				thing.draw()
 			for blitdata in blitqueue:
 				DISPLAYSURF.blit(blitdata[0], blitdata[1])
-			#get player events and pass them to the ship's event handler
-			for event in pygame.event.get():
+			for event in pygame.event.get(): #get player events and pass them to the ship's event handler
 				if event.type == QUIT:
 					pygame.quit()
 					sys.exit()
 				elif event.type == KEYDOWN:
 					ship.eventHandle(event)
-			#update everything, and check for collisions. the only collisions we care about 
-			#are "good guy" ones - bad guys get all the luck, it seems
-			for thing in self.allqueue:
+			for thing in self.allqueue: #update everything, and check for collisions.
 				thing.update()
 				thing_hit_list = pygame.sprite.spritecollide(thing, self.allqueue, False)
 				if not thing_hit_list:
 					pass
 				elif thing in self.goodqueue:
 					for otherthing in thing_hit_list:
-						if otherthing in self.badqueue:
-							thing.got_hit()
-							otherthing.got_hit()
+						if otherthing in self.badqueue:	#only cares if object in goodqueue collides with
+							thing.got_hit()				#object in badqueue. prevents all manner of
+							otherthing.got_hit()		#friendly fire
 
-			if not ship.lives:
-				#return False to go to gameover
+			if not ship.lives:		#return False to go to gameover
 				running = False
 				return False
-			if not self.badqueue:
-				#return True to generate new level
+			if not self.badqueue:	#return True to generate new level
 				running = False
 				return True
 			pygame.display.flip()
