@@ -12,6 +12,7 @@ Present state of things:
 
 12/17/13
 	GAME NOT DEAD JUST RESTING
+	
 	I've been off doing silly things like learning about HTML and CSS and JavaScript. Funny how being strongly compelled to separate concerns can change the way one looks at code from ages past.
 	
 	So, lots of refactoring. Of course, I noobed it up and created a whole separate folder for the latest draft of the game, and then cleverly uploaded it into this repo instead of, like, making a branch or something. :P
@@ -27,8 +28,7 @@ Present state of things:
 		
 		This doesn't cover 100% of the bases; the teleporting enemies still need to have their draw() method replaced so they get special treatment. Perhaps a flag like enemy.doDraw is in order. Not sure.
 		
-		Speaking of enemy.attributes, they've changed as well. The base Enemy class has a couple of new attributes; it stores its initial XY coordinates and has a generic 'self.counter' to help avoid creating new
-		attributes if one wants to do something interesting. These have significantly helped in reducing the number of goofy things I had to do just to make enemies turn around (multiplying enemy.speed by -1, yuk) or countdown to a teleport. It also helps in keeping enemies on the screen; if they use enemy.counter to determine when they should change their direction or pattern of movement, setting it to the correct value if it exceeds the bounds of the screen essentially triggers it to turn around. Not too bad. See the default Enemy class for what exactly this means.
+		Speaking of enemy.attributes, they've changed as well. The base Enemy class has a couple of new attributes; it stores its initial XY coordinates and has a generic 'self.counter' to help avoid creating new attributes if one wants to do something interesting. These have significantly helped in reducing the number of goofy things I had to do just to make enemies turn around (multiplying enemy.speed by -1, yuk) or countdown to a teleport. It also helps in keeping enemies on the screen; if they use enemy.counter to determine when they should change their direction or pattern of movement, setting it to the correct value if it exceeds the bounds of the screen essentially triggers it to turn around. Not too bad. See the default Enemy class for what exactly this means.
 		
 		- Bullets and enemies in general use different logic to determine how they move. object.move() uses string tricks to see which way the object is moving, but also (and this might be a little non-standard, but I think it is slick) uses len(object.direction) to determine whether it is moving too fast for the direction it's travelling.
 		
@@ -37,6 +37,30 @@ Present state of things:
 		- The background is now neatly wrapped in a class, and it changes the color of the stars based on how quickly they're moving. It's cool.
 		
 		- font Surface objects are generated a little more smartly now. If they aren't going to change their content during the current loop, they are instantiated prior to the while loop. If they are going to change, they are updated during the while loop. Before, they all just lived in each while loop, so more objects were being created per frame than necessary. There is probably a better way still to update their text, so I may have to consult the PyGame docs to make sure I'm not missing something.
+		
+		- Collision detection isn't iterating over everything every frame anymore. Instead, it just determines if an object in the 'goodqueue' is colliding with something, and IF it is, is it colliding with something in the 'badqueue', and IF it is, they both call obj.got_hit(). The one kind of lousy part about this is that enemy.got_hit() still checks if it is colliding with the ship object. I don't know that it's appropriate to hard-code it in this way, so I should probably move that to the new part of the collision detection logic.
+		
+	Future plans:
+		
+		- ACTUAL SPRITE IMAGES. DEAR GOD. PyGame draws a mean ellipse, but it isn't very engaging. This is *Space Frunks*, not Oval vs. Squares. Honestly!
+	
+		- Everyone who has played this game (read: people I've bugged to try it until they capitulate) gets bitten by enemies spawning on top of them. I never experienced this because I know how I wrote the game; the middle is 'spawn safe', so I'd always just retreat after killing the last guy. This should be changed; probably will just have to teleport ship to the middle of the screen between levels/waves/etc.
+		
+		- Levels are a little unstructured and too short. The random factor is nice, but three frunks does not a 'level' make. There's no clear division between levels; there's no "GREAT JOB" screen or score tallying or clever screen-wipe, just a bunch of bad guys spawning on top of you.
+		
+		- For some reason I (noobishly) wrote a ton of code that just draws the current scene. I could tear out a lot of lines of repeated jank by having one view that just displays whatever the current scene is. A 'scene' could be anything; intro screen, level, instructions on how to play (if there were any), options menu (if there were any), game over screen, etc.
+		
+		- Players are abusing the Auction House, and it needs to stop.
+		
+		- Intro screen should flash instructions on playing.
+		
+		- Apparently I find 'mouse is move, keypad is shoot' more intuitive than other people do, so a keyboard-based directional thing wouldn't be all bad. Also not everyone has a 10-key, so some clever use of similarly spaced letters may be appropriate.
+		
+		- To expand on the above - an Options menu would be boss.
+		
+		- I've introduced some 'floating functions' that should probably belong to an existing object. coinflip() randomly returns True or False; newWordSurfAndRect() returns precisely those things, to make text a little less annoying to create and later draw; loadSound() loads a sound file; and isOutOfBounds() checks for things that have gone off the screen. They should really belong somewhere, probably, but for now it is minor and they can be homeless.
+		
+		- To that end, if I could separate more concerns I could put classes in separate files. 700 lines of code isn't a lot to sift through, but it's a little bit annoy.
 
 12/13/12
 	I work at a software company, though I don't code. I used to wonder why things took so long to fix.
