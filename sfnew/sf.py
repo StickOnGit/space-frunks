@@ -30,6 +30,9 @@ BLACK = (0, 0, 0)
 YELLOW = (255, 255, 0)
 WHITE = (255, 255, 255)
 
+FOURDIRS = ['up', 'down', 'left', 'right']
+EIGHTDIRS = ['up', 'down', 'left', 'right', 'upleft', 'upright', 'downleft', 'downright']
+
 DISPLAYSURF = pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
 pygame.display.set_caption('Space Frunks')
 pygame.mouse.set_visible(0)
@@ -201,7 +204,7 @@ class Enemy(pygame.sprite.Sprite):
 		self.xy = (x, y)
 		self.range = random.randrange(60, 120)
 		self.counter = random.randrange(0, self.range)
-		self.direction = random.choice(('up', 'down', 'left', 'right'))
+		self.direction = random.choice(FOURDIRS)
 		self.ownwidth = 15
 		self.ownheight = 15
 		self.color = BLUE
@@ -288,7 +291,7 @@ class Enemy(pygame.sprite.Sprite):
 			shoot = random.randint(1, self.shotrate)
 			if shoot >= self.shotrate:
 				shotx, shoty = self.rect.center
-				shotDirection = random.choice(('up', 'down', 'left', 'right', 'upleft', 'upright', 'downleft', 'downright'))
+				shotDirection = random.choice(EIGHTDIRS)
 				badShot = Bullet(shotx, shoty, shotDirection)
 				badShot.speed = 4
 				badShot.color = LIGHTRED
@@ -395,10 +398,10 @@ def newSweeper(self):
 		self.y = random.randrange(25, (SCREENHEIGHT - 25))
 		self.x = SCREENWIDTH + 20
 	if self.y > SCREENHEIGHT + 30:
-		self.x = random.randrange(25, (SCREENHEIGHT - 25))
+		self.x = random.randrange(25, (SCREENWIDTH - 25))
 		self.y = -20
 	if self.y < -30:
-		self.x = random.randrange(25, (SCREENHEIGHT - 25))
+		self.x = random.randrange(25, (SCREENWIDTH - 25))
 		self.y = SCREENHEIGHT + 20
 	
 def newRammer(self):
@@ -440,7 +443,7 @@ def newTeleport(self):
 		safey = range(10, (shipY - 55)) + range((shipY + 55), (SCREENHEIGHT - 10))
 		self.x = random.choice(safex)
 		self.y = random.choice(safey)
-		self.direction = random.choice(('up', 'down', 'left', 'right'))
+		self.direction = random.choice(FOURDIRS)
 		self.counter = FPS * 3
 		teleportSound.play()
 		
@@ -456,6 +459,31 @@ def newTeleDraw(self):
 		pygame.draw.rect(DISPLAYSURF, self.color, self.rect, 3)
 	else:
 		pass
+		
+def boomer(self):
+	"""Comes in from the borders and then blows up for big damages."""
+	startX, startY = self.xy
+	if abs(startX - self.x) >= SCREENWIDTH / 2 or abs(startY - self.y) >= SCREENHEIGHT / 2:
+		self.speed = self.speed - 1 if self.speed > 0 else 0
+		self.color = tuple([color+15 if color < 230 else 255 for color in self.color])
+	if self.color == WHITE:
+		for direction in EIGHTDIRS:
+			badBullet = Bullet(self.x, self.y, direction)
+			badqueue.add(badBullet)
+			allqueue.add(badBullet)
+		if 'up' in self.direction:
+			self.y = SCREENHEIGHT + 10
+		if 'down' in self.direction:
+			self.y = -10
+		if 'left' in self.direction:
+			self.x = SCREENWIDTH + 10
+		if 'right' in self.direction:
+			self.x = -10
+			
+		self.xy = (self.x, self.y)
+		self.color = YELLOW		#maybe look into decorators or nesting a method
+		self.speed = 3			#to carry these old values around
+		
 
 
 class GameHandler(object):
@@ -506,8 +534,8 @@ class GameHandler(object):
 		Level = GameLoop(difficulty, stage)
 		while gameOn:
 			nextLevel = Level.play(difficulty, stage)
-			if nextLevel: #use divmod() to determine next level's iteration and difficulty
-				levelCounter += 1
+			if nextLevel: 
+				levelCounter += 1	#use divmod() to determine next level's iteration and difficulty
 				difficulty, stage = divmod(levelCounter, 4)
 				Level = GameLoop(difficulty, stage)
 			else:
@@ -526,7 +554,7 @@ class GameHandler(object):
 		for thing in allqueue:
 			thing.kill()
 		#set scoreString to empty in case of input.
-		#set a bool if ship.score is high enough
+		#if ship.score is high enough, collectScore is set to True
 		scoreString = ''
 		collectScore = False
 		if ship.score > scoreList[-1][1]:
@@ -635,7 +663,8 @@ class GameLoop(object):
 			for tick in range (0, difficulty):
 				if coinflip():
 					enemy.speed *= 1.05
-			newMovement = random.choice((kindsOfAI))
+			#newMovement = random.choice((kindsOfAI))
+			newMovement = newSweeper
 			if not newMovement:
 				pass
 			else:
@@ -643,6 +672,7 @@ class GameLoop(object):
 			if newMovement == newSweeper:
 				enemy.points = 150
 				enemy.color = YELLOW
+				enemy.shotCheck = types.MethodType(boomer, enemy)
 			elif newMovement == newRammer:
 				enemy.points = 200
 				enemy.color = PURPLE
