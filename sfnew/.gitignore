@@ -1,0 +1,6 @@
+# ignore these #
+################
+
+*.pyc
+*.py~
+*.swp
