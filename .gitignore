@@ -1,0 +1,7 @@
+# ignore these #
+################
+
+*.pyc
+*.py~
+*.swp
+scores.py
