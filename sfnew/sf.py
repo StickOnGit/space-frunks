@@ -4,6 +4,8 @@ import os
 import sys
 import time
 import types
+import spritesheet
+import math
 try:
 	import cPickle as pickle
 except:
@@ -32,6 +34,7 @@ WHITE = (255, 255, 255)
 
 FOURDIRS = ['up', 'down', 'left', 'right']
 EIGHTDIRS = ['up', 'down', 'left', 'right', 'upleft', 'upright', 'downleft', 'downright']
+SPINNER = {'up': 0, 'upright': -45, 'right': -90, 'downright': -135, 'down':180, 'downleft':135, 'left':90, 'upleft': 45}
 
 DISPLAYSURF = pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
 pygame.display.set_caption('Space Frunks')
@@ -75,6 +78,16 @@ def isOutOfBounds(objRect, offset=15):
 	else:
 		return False
 
+spinIt = pygame.transform.rotate
+
+def getDegree(spinningRect, seekingRect):
+	"""Returns angle to spin an image to in order to face it correctly."""
+	deltax = seekingRect[0] - spinningRect[0]
+	deltay = seekingRect[1] - spinningRect[1]
+	radians = math.atan2(-deltay, deltax)
+	radians %= 2 * math.pi
+	return math.degrees(radians)
+
 #loads sounds
 enemyDeadSound = loadSound('sounds', 'enemydead.wav')
 playerDeadSound = loadSound('sounds', 'playerdead.wav')
@@ -83,12 +96,15 @@ enemyShotSound = loadSound('sounds', 'enemyshot.wav')
 playerShotSound = loadSound('sounds', 'playershot.wav')
 
 #don't load gameOver music... it's handled differently
+#load spritesheet
+allSheet = spritesheet.spritesheet('imgs/sheet.png')
 	
 class Player(pygame.sprite.Sprite):
 	def __init__(self, x, y):
 		pygame.sprite.Sprite.__init__(self)
 		self.x = x
 		self.y = y
+		self.img = allSheet.image_at((0, 0, 32, 32), -1)
 		self.ownwidth = 50
 		self.speed = 5
 		self.ownheight = 25
@@ -109,6 +125,8 @@ class Player(pygame.sprite.Sprite):
 		self.respawn = 0
 		self.score = 0
 		self.extraGuyCounter = 1
+		self.x = SCREENWIDTH / 2
+		self.y = SCREENHEIGHT / 2
 
 	def eventHandle(self, event):
 		if event.type == KEYDOWN and self.cooldown == 0:
@@ -177,10 +195,22 @@ class Player(pygame.sprite.Sprite):
 	def draw(self):
 		"""Hook for the controller's draw() call.
 		If not respawning, draw. If half-way done respawning, flicker"""
-		if not self.respawn:
-			pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 3)
-		elif self.respawn <= FPS and (self.respawn % 5):
-			pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 3)
+		###use the newRammer logic to find the direction for the ship?
+		###or at least, use it to spin the graphics correctly.
+		#if not self.respawn:
+		#	pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 3)
+		#elif self.respawn <= FPS and (self.respawn % 5):
+		#	pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 3)
+		#else:
+		#	pass
+		shipSpin = getDegree(pygame.mouse.get_pos(), self.rect.center)
+		shipImg = spinIt(self.img, shipSpin)
+		if not self.respawn or (self.respawn <= FPS and (self.respawn % 5)):
+			#pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 3)
+			DISPLAYSURF.blit(shipImg, (self.x, self.y))
+		#elif 
+			#pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 3)
+		#	DISPLAYSURF.blit(shipImg, self.rect.center)
 		else:
 			pass
 
@@ -469,6 +499,8 @@ def boomer(self):
 	if self.color == WHITE:
 		for direction in EIGHTDIRS:
 			badBullet = Bullet(self.x, self.y, direction)
+			badBullet.speed = 4
+			badBullet.color = LIGHTRED
 			badqueue.add(badBullet)
 			allqueue.add(badBullet)
 		if 'up' in self.direction:
@@ -663,8 +695,8 @@ class GameLoop(object):
 			for tick in range (0, difficulty):
 				if coinflip():
 					enemy.speed *= 1.05
-			#newMovement = random.choice((kindsOfAI))
-			newMovement = newSweeper
+			newMovement = random.choice((kindsOfAI))
+			#newMovement = newSweeper
 			if not newMovement:
 				pass
 			else:
@@ -672,7 +704,8 @@ class GameLoop(object):
 			if newMovement == newSweeper:
 				enemy.points = 150
 				enemy.color = YELLOW
-				enemy.shotCheck = types.MethodType(boomer, enemy)
+				if difficulty >=5 and coinflip() and coinflip():
+					enemy.shotCheck = types.MethodType(boomer, enemy)
 			elif newMovement == newRammer:
 				enemy.points = 200
 				enemy.color = PURPLE
