@@ -105,9 +105,10 @@ class Player(pygame.sprite.Sprite):
 		self.x = x
 		self.y = y
 		self.img = allSheet.image_at((0, 0, 32, 32), -1)
-		self.ownwidth = 50
+		self.drawImg = self.img
+		self.ownwidth, self.ownheight = self.img.get_bounding_rect()[2:]
 		self.speed = 5
-		self.ownheight = 25
+		#self.ownheight = self.img.rect.height
 		self.color = RED
 		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
 		self.cooldown = 0
@@ -167,50 +168,54 @@ class Player(pygame.sprite.Sprite):
 		"""Updates ship coordinates. Gets the difference between ship's current x and y position
 		and the mouse's current x and y position; if the difference is less than ship.speed,
 		it moves right to that spot. Else, just moves at a constant rate towards the mouse.
+		Also sets rotation for 'self.drawImg' so it looks correct when moving.
 		
-		Also counts down weapon cooldown, respawn (if needed), and checks to see if its point total
+		Finally, counts down weapon cooldown, respawn (if needed), and checks to see if its point total
 		grants it an extra life."""
+		drawDir = ''
 		mouseX, mouseY = pygame.mouse.get_pos()
-		deltaX, deltaY = abs(self.x - mouseX), abs(self.y - mouseY)
-		xDirect = 1 if mouseX >= self.x else -1
-		yDirect = 1 if mouseY >= self.y else -1
+		shipX, shipY = self.rect.center
+		if mouseY > shipY:
+			drawDir += 'down'
+		if mouseY < shipY:
+			drawDir += 'up'
+		if mouseX > shipX:
+			drawDir += 'right'
+		if mouseX < shipX:
+			drawDir += 'left'
+		try:
+			self.drawImg = spinIt(self.img, SPINNER[drawDir])
+		except KeyError:
+			self.drawImg = spinIt(self.img, SPINNER['up'])
+		deltaX, deltaY = abs(shipX - mouseX), abs(shipY - mouseY)
+		xDirect = 1 if mouseX >= shipX else -1
+		yDirect = 1 if mouseY >= shipY else -1
 		if deltaX >= 1 and deltaY >= 1:
 			xDirect /= 1.2
 			yDirect /= 1.2
 		if deltaX < self.speed:
-			self.x = mouseX
+			moveToX = mouseX
 		else:
-			self.x += (self.speed * xDirect)
+			moveToX = shipX + (self.speed * xDirect)
 		if deltaY < self.speed:
-			self.y = mouseY
+			moveToY = mouseY
 		else:
-			self.y += (self.speed * yDirect)
+			moveToY = shipY + (self.speed * yDirect)
+		self.rect = self.drawImg.get_bounding_rect()
+		self.rect.center = moveToX, moveToY
 		self.cooldown -= 1 if self.cooldown > 0 else 0
 		self.respawn -= 1 if self.respawn > 0 else 0
 		if self.score >= (8000 * self.extraGuyCounter):	#grants an extra life every X points
 			ship.lives += 1
 			self.extraGuyCounter += 1
-		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
 
 	def draw(self):
 		"""Hook for the controller's draw() call.
 		If not respawning, draw. If half-way done respawning, flicker"""
-		###use the newRammer logic to find the direction for the ship?
-		###or at least, use it to spin the graphics correctly.
-		#if not self.respawn:
-		#	pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 3)
-		#elif self.respawn <= FPS and (self.respawn % 5):
-		#	pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 3)
-		#else:
-		#	pass
-		shipSpin = getDegree(pygame.mouse.get_pos(), self.rect.center)
-		shipImg = spinIt(self.img, shipSpin)
+		#pygame.draw.rect(DISPLAYSURF, (self.color), (self.rect), 3)
 		if not self.respawn or (self.respawn <= FPS and (self.respawn % 5)):
-			#pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 3)
-			DISPLAYSURF.blit(shipImg, (self.x, self.y))
-		#elif 
-			#pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 3)
-		#	DISPLAYSURF.blit(shipImg, self.rect.center)
+			drawCtr = self.drawImg.get_rect(center=self.rect.center)
+			DISPLAYSURF.blit(self.drawImg, drawCtr)
 		else:
 			pass
 
