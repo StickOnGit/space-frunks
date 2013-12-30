@@ -736,6 +736,7 @@ class GameLoop(object):
 		levelSurf, levelRect = newWordSurfAndRect('Level %d - %d'%(difficulty + 1, stage + 1), WHITE, statsFont)
 		levelRect.center = ((SCREENWIDTH / 2), (SCREENHEIGHT / 20))
 		running = True
+		paused = False
 		while running:
 			scoreNumSurf, scoreNumRect = newWordSurfAndRect(str(ship.score), WHITE, statsFont)
 			scoreNumRect.topleft = (scoreRect.topright[0] + 5, scoreRect.topright[1])
@@ -762,8 +763,14 @@ class GameLoop(object):
 					sys.exit()
 				elif event.type == KEYDOWN:
 					ship.eventHandle(event)
+					if event.key == K_p:
+						if not paused:
+							paused = True
+						elif paused:
+							paused = False
 			for thing in self.allqueue: #update everything, and check for collisions.
-				thing.update()
+				if not paused:
+					thing.update()
 				thing_hit_list = pygame.sprite.spritecollide(thing, self.allqueue, False)
 				if not thing_hit_list:
 					pass
