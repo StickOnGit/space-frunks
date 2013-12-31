@@ -80,13 +80,13 @@ def isOutOfBounds(objRect, offset=15):
 
 spinIt = pygame.transform.rotate
 
-def getDegree(spinningRect, seekingRect):
-	"""Returns angle to spin an image to in order to face it correctly."""
-	deltax = seekingRect[0] - spinningRect[0]
-	deltay = seekingRect[1] - spinningRect[1]
-	radians = math.atan2(-deltay, deltax)
-	radians %= 2 * math.pi
-	return math.degrees(radians)
+#def getDegree(spinningRect, seekingRect):
+#	"""Returns angle to spin an image to in order to face it correctly."""
+#	deltax = seekingRect[0] - spinningRect[0]
+#	deltay = seekingRect[1] - spinningRect[1]
+#	radians = math.atan2(-deltay, deltax)
+#	radians %= 2 * math.pi
+#	return math.degrees(radians)
 
 #loads sounds
 enemyDeadSound = loadSound('sounds', 'enemydead.wav')
@@ -97,20 +97,19 @@ playerShotSound = loadSound('sounds', 'playershot.wav')
 
 #don't load gameOver music... it's handled differently
 #load spritesheet
-allSheet = spritesheet.spritesheet('imgs/sheet.png')
+ALLSHEET = spritesheet.spritesheet('imgs/sheet.png')
+PLAYERSHIPIMG = ALLSHEET.image_at((0, 0, 32, 32), -1)
+PLAYERSHIPFIRE = ALLSHEET.image_at((32, 0, 32, 32), -1)
 	
 class Player(pygame.sprite.Sprite):
 	def __init__(self, x, y):
 		pygame.sprite.Sprite.__init__(self)
 		self.x = x
 		self.y = y
-		self.img = allSheet.image_at((0, 0, 32, 32), -1)
+		self.img = PLAYERSHIPIMG
 		self.drawImg = self.img
-		self.ownwidth, self.ownheight = self.img.get_bounding_rect()[2:]
-		self.speed = 5
-		#self.ownheight = self.img.rect.height
-		self.color = RED
-		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
+		self.speed = 4
+		self.rect = self.drawImg.get_bounding_rect()
 		self.cooldown = 0
 		self.respawn = 0
 		self.lives = 3
@@ -126,10 +125,11 @@ class Player(pygame.sprite.Sprite):
 		self.respawn = 0
 		self.score = 0
 		self.extraGuyCounter = 1
-		self.x = SCREENWIDTH / 2
-		self.y = SCREENHEIGHT / 2
+		self.rect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
 
 	def eventHandle(self, event):
+		#self.img = PLAYERSHIPIMG
+		#fire = False
 		if event.type == KEYDOWN and self.cooldown == 0:
 			fire = False
 			if event.key == K_KP8:
@@ -157,12 +157,15 @@ class Player(pygame.sprite.Sprite):
 				fire = True
 				shotDirection = 'downright'
 			if fire:
+				#self.drawImg = self.imgs[1]
 				shotx, shoty = self.rect.center
 				shot = Bullet(shotx, shoty, shotDirection)
 				goodqueue.add(shot)
 				allqueue.add(shot)
 				self.cooldown = 10
 				playerShotSound.play()
+			#elif self.drawImg != self.imgs[0]:
+			#	self.drawImg = self.imgs[0]
 
 	def update(self):
 		"""Updates ship coordinates. Gets the difference between ship's current x and y position
@@ -212,7 +215,7 @@ class Player(pygame.sprite.Sprite):
 	def draw(self):
 		"""Hook for the controller's draw() call.
 		If not respawning, draw. If half-way done respawning, flicker"""
-		#pygame.draw.rect(DISPLAYSURF, (self.color), (self.rect), 3)
+		#pygame.draw.rect(DISPLAYSURF, RED, (self.rect), 3)
 		if not self.respawn or (self.respawn <= FPS and (self.respawn % 5)):
 			drawCtr = self.drawImg.get_rect(center=self.rect.center)
 			DISPLAYSURF.blit(self.drawImg, drawCtr)
@@ -235,6 +238,8 @@ class Enemy(pygame.sprite.Sprite):
 		pygame.sprite.Sprite.__init__(self)
 		self.x = x
 		self.y = y
+		self.img = ALLSHEET.image_at((32, 32, 32, 32), -1)
+		self.drawImg = self.img
 		self.shotrate = 20
 		self.xy = (x, y)
 		self.range = random.randrange(60, 120)
@@ -300,9 +305,14 @@ class Enemy(pygame.sprite.Sprite):
 		
 	def findRect(self):
 		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
+		#self.rect = self.drawImg.get_rect(center=self.rect.center)
 		
 	def draw(self):
-		pygame.draw.rect(DISPLAYSURF, (self.color), (self.rect), 4)
+		#pygame.draw.rect(DISPLAYSURF, (self.color), (self.rect), 4)
+		#drawCtr = self.drawImg.get_rect(center=self.rect.center)
+		self.drawImg = spinIt(self.img, SPINNER[self.direction])
+		drawCtr = self.drawImg.get_rect(center=self.rect.center)
+		DISPLAYSURF.blit(self.drawImg, drawCtr)
 
 	def got_hit(self):
 		"""Checks to see if the collision is just
@@ -753,10 +763,10 @@ class GameLoop(object):
 
 			DISPLAYSURF.fill(BLACK)
 			STARFIELDBG.update()
-			for thing in self.allqueue:
-				thing.draw()
-			for blitdata in blitqueue:
-				DISPLAYSURF.blit(blitdata[0], blitdata[1])
+			#for thing in self.allqueue:
+			#	thing.draw()
+			#for blitdata in blitqueue:
+			#	DISPLAYSURF.blit(blitdata[0], blitdata[1])
 			for event in pygame.event.get(): #get player events and pass them to the ship's event handler
 				if event.type == QUIT:
 					pygame.quit()
@@ -780,13 +790,17 @@ class GameLoop(object):
 							thing.got_hit()				#object in badqueue. prevents all manner of
 							otherthing.got_hit()		#friendly fire
 
+			for thing in self.allqueue:
+				thing.draw()
+			for blitdata in blitqueue:
+				DISPLAYSURF.blit(blitdata[0], blitdata[1])
+			pygame.display.flip()
 			if not ship.lives:		#return False to go to gameover
 				running = False
 				return False
 			if not self.badqueue:	#return True to generate new level
 				running = False
 				return True
-			pygame.display.flip()
 			fpsClock.tick(FPS)
 
 TheGame = GameHandler()
