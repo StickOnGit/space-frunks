@@ -1,3 +1,12 @@
+##	Space Frunks - a space shooter
+##
+##	(C) 2012 - 2014 Luke Sticka
+##	Coding by Luke Sticka
+##	Spritesheet contributed by Sam Sticka
+##	8-bit sounds from... a website. I forget where, but they aren't original
+##
+#################################################################################
+
 import pygame
 import random
 import os
@@ -38,7 +47,7 @@ FOURDIRS = ['up', 'down', 'left', 'right']
 EIGHTDIRS = ['up', 'down', 'left', 'right', 'upleft', 'upright', 'downleft', 'downright']
 SPINNER = {'up': 0, 'upright': -45, 'right': -90, 'downright': -135, 'down':180, 'downleft':135, 'left':90, 'upleft': 45}
 
-STARTINGLEVEL = 16
+STARTINGLEVEL = 11
 EARNEDEXTRAGUY = 8000
 
 DISPLAYSURF = pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
@@ -67,15 +76,14 @@ def coinflip():
 	
 def word_surf_and_rect(wordstring, wordcolor, wordfont=GAMEFONT):
 	"""Returns a font Surface and a font Rect in a tuple.
-	
-	Arguments are: the string it's writing, the color tuple, and (optionally)the pygame.font.Font object."""
+Arguments are: the string it's writing, the color tuple, and (optionally)the pygame.font.Font object."""
 	wordSurf = wordfont.render(wordstring, True, wordcolor)
 	wordRect = wordSurf.get_rect()
 	return wordSurf, wordRect
 	
 def is_out_of_bounds(objRect, offset=15):
-	"""Takes a tuple and checks that it is within a certain range. Used to see if an object has gone too far
-	off the screen."""
+	"""Used to see if an object has gone too far
+	off the screen. Can be optionally passed an 'offset' to alter just how far off the screen an object can live."""
 	try:
 		objX, objY = objRect
 	except:
@@ -85,18 +93,21 @@ def is_out_of_bounds(objRect, offset=15):
 	else:
 		return False
 
-#loads sounds
+#loads sounds(but not music... it's handled differently)
 enemyDeadSound = load_sound('sounds', 'enemydead.wav')
 playerDeadSound = load_sound('sounds', 'playerdead.wav')
 teleportSound = load_sound('sounds', 'teleport.wav')
 enemyShotSound = load_sound('sounds', 'enemyshot.wav')
 playerShotSound = load_sound('sounds', 'playershot.wav')
 
-#don't load gameOver music... it's handled differently
 #load spritesheet
 ALLSHEET = spritesheet.spritesheet('imgs/sheet.png')
 PLAYERSHIPIMG = ALLSHEET.image_at((0, 0, 32, 32), -1)
 PLAYERSHIPFIRE = ALLSHEET.image_at((32, 0, 32, 32), -1)
+REDSHIPIMG = ALLSHEET.image_at((0, 32, 32, 32), -1)
+GREENSHIPIMG = ALLSHEET.image_at((0, 64, 32, 32), -1)
+GOODGUYSHOT = ALLSHEET.image_at((0, 96, 32, 32), -1)
+BADGUYSHOT = ALLSHEET.image_at((32, 96, 32, 32), -1)
 	
 class Player(pygame.sprite.Sprite):
 	def __init__(self, x, y):
@@ -115,8 +126,7 @@ class Player(pygame.sprite.Sprite):
 		
 	def ready_new_game(self):
 		"""Gets the ship ready for a new game.
-		
-		Has static values for now, might change this to use variable values."""
+Has static values for now, might change this to use variable values."""
 		self.lives = 3
 		self.cooldown = 0
 		self.respawn = 0
@@ -160,13 +170,9 @@ class Player(pygame.sprite.Sprite):
 				playerShotSound.play()
 
 	def update(self):
-		"""Updates ship coordinates. Gets the difference between ship's current x and y position
-		and the mouse's current x and y position; if the difference is less than ship.speed,
-		it moves right to that spot. Else, just moves at a constant rate towards the mouse.
-		Also sets rotation for 'self.drawImg' so it looks correct when moving.
+		"""Updates ship coordinates. Gets the difference between ship's current x and y position and the mouse's current x and y position; if the difference is less than ship.speed, it moves right to that spot. Else, just moves at a constant rate towards the mouse. Also sets rotation for 'self.drawImg' so it looks correct when moving.
 		
-		Finally, counts down weapon cooldown, respawn (if needed), and checks to see if its point total
-		grants it an extra life."""
+Finally, counts down weapon cooldown, respawn (if needed), and checks to see if its point total grants it an extra life."""
 		drawDir = ''
 		mouseX, mouseY = pygame.mouse.get_pos()
 		shipX, shipY = self.rect.center
@@ -206,8 +212,7 @@ class Player(pygame.sprite.Sprite):
 
 	def draw(self):
 		"""Hook for the controller's draw() call.
-		If not respawning, draw. If half-way done respawning, flicker"""
-		#pygame.draw.rect(DISPLAYSURF, RED, (self.rect), 3)
+		If not respawning, draw. If half-way done respawning, flicker."""
 		if not self.respawn or (self.respawn <= FPS and (self.respawn % 5)):
 			drawCtr = self.drawImg.get_rect(center=self.rect.center)
 			DISPLAYSURF.blit(self.drawImg, drawCtr)
@@ -215,8 +220,7 @@ class Player(pygame.sprite.Sprite):
 			pass
 
 	def got_hit(self):
-		"""Hook for controller's got_hit() call. Handles killing the ship and losing a life.
-		If the ship is respawning, this does nothing - respawn invulnerability!"""
+		"""Hook for controller's got_hit() call. Handles killing the ship and losing a life. Passes if ship is respawning."""
 		if self.respawn > 0:
 			pass
 		else:
@@ -237,19 +241,17 @@ class Enemy(pygame.sprite.Sprite):
 		self.range = random.randrange(60, 120)
 		self.counter = random.randrange(0, self.range)
 		self.direction = random.choice(FOURDIRS)
-		self.ownwidth = 15
-		self.ownheight = 15
+		self.width = 15
+		self.height = 15
 		self.color = BLUE
-		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
+		self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
 		self.speed = 3
 		self.cooldown = FPS / 2
 		self.points = 100
 
 	def update(self):
 		"""Calls all the methods!
-		
-		Really probably any of them *could* be replaced, but .move() and .find_rect() are
-		quite important and should probably normally be as-is."""
+Really probably any of them *could* be replaced, but .move() and .find_rect() are quite important and should probably normally be as-is."""
 		self.unique_action()
 		self.shot_check()
 		self.move()
@@ -257,9 +259,7 @@ class Enemy(pygame.sprite.Sprite):
 	
 	def unique_action(self):
 		"""A hook for new movements. Replace this with new logic to change enemy behavior.
-		
-		This default action is to increment self.counter until it exceeds self.range.
-		When it does, reverse direction."""
+This default action is to increment self.counter until it exceeds self.range. When it does, reverse direction."""
 		if self.counter >= self.range or is_out_of_bounds(self.rect.center):
 			self.counter = 0
 			newDirection = ''
@@ -277,12 +277,7 @@ class Enemy(pygame.sprite.Sprite):
 
 	def move(self):
 		"""Calculates the new position for the object.
-		
-		Uses strings to determine which direction to move in, and uses a speed constant to determine
-		how many pixels in a given direction to move. A string representing two directions
-		('upleft' or 'downright' for example) will cause it to divide the speed constant by 1.4 so it
-		does not appear to move faster when traveling diagonally.
-		"""
+Uses strings to determine which direction to move in, and uses a speed constant to determine how many pixels in a given direction to move. A string representing two directions ('upleft' or 'downright' for example) will cause it to divide the speed constant by 1.4 so it does not appear to move faster when traveling diagonally."""
 		speedConstant = self.speed
 		if len(self.direction) > 5:
 			speedConstant /= 1.4
@@ -296,36 +291,30 @@ class Enemy(pygame.sprite.Sprite):
 			self.x += speedConstant
 		
 	def find_rect(self):
-		#self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
 		xy = self.x, self.y
 		newRect = self.drawImg.get_bounding_rect()
 		newRect.topleft = xy
 		self.rect = newRect
-		#self.rect = self.drawImg.get_rect(center=self.rect.center)
 		
 	def draw(self):
 		turn = self.direction if self.direction is not '' else 'up'
-		pygame.draw.rect(DISPLAYSURF, (self.color), (self.rect), 4)
-		#drawCtr = self.drawImg.get_rect(center=self.rect.center)
+		#pygame.draw.rect(DISPLAYSURF, (self.color), (self.rect), 4)
 		self.drawImg = rotate_img(self.img, SPINNER[turn])
 		drawCtr = self.drawImg.get_rect(center=self.rect.center)
 		DISPLAYSURF.blit(self.drawImg, drawCtr)
 
 	def got_hit(self):
-		"""Checks to see if the collision is just
-		the player - if so, Enemy ignores it. (Player doesn't)"""
+		"""Checks to see if the collision is just the player - if so, Enemy ignores it."""
 		if self.rect.colliderect(ship.rect):
 			pass
 		else:
-			ship.score += self.points
+			ship.score += self.points #should change this
 			self.kill()
 			enemyDeadSound.play()
 
 	def shot_check(self):
 		"""Determines when and if the object can attempt to fire.
-		
-		Once obj.cooldown reaches 0, gets a random number between 1 and obj.shotrate. If that number is
-		equal to obj.shotrate, it fires."""
+Once obj.cooldown reaches 0, gets a random number between 1 and obj.shotrate. If that number is equal to obj.shotrate, it fires."""
 		self.cooldown -= 1
 		if self.cooldown > 0:
 			pass
@@ -351,9 +340,9 @@ class Bullet(pygame.sprite.Sprite):
 		self.direction = direction
 		self.range = SCREENDIAG + 20
 		self.counter = 0
-		self.ownwidth = 4
-		self.ownheight = 4
-		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
+		self.width = 4
+		self.height = 4
+		self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
 		self.speed = 10
 		self.color = GREEN
 
@@ -375,10 +364,12 @@ class Bullet(pygame.sprite.Sprite):
 			self.kill()
 
 	def find_rect(self):
-		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
+		self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
 	
 	def draw(self):
 		pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 2)
+		#drawCtr = self.drawImg.get_rect(center=self.rect.center)		##need different sprite
+		#DISPLAYSURF.blit(self.drawImg, drawCtr)						##current badguy sprite is transparent
 
 	def got_hit(self):
 		self.kill()
@@ -398,8 +389,7 @@ class Starfield(object):
 		
 	def add_stars(self, stars='_default'):
 		"""Adds X stars to self.starfield, which is just a list.
-		For some reason, an optional value can be passed to this to add a number of stars besides
-		self.stars."""
+For some reason, an optional value can be passed to this to add a number of stars besides self.stars."""
 		if stars is '_default':
 			stars = self.stars
 		for i in range(stars):
@@ -430,13 +420,9 @@ class Starfield(object):
 STARFIELDBG = Starfield()
 
 #alternative patterns of movement for Enemy() added via strategy patterns, thanks AC
-
 def enemy_sweep(self):
 	"""Ignores enemy.counter and simply allows the enemy to follow a straight line.
-	
-	If it goes too far out of bounds, gives it a new random position on the axis of
-	the boundary it didn't exit (if not x, y: if not y, x) and moves it to the opposite end
-	of the screen."""
+If it goes too far out of bounds, gives it a new random position on the axis of the boundary it didn't exit (if not x, y: if not y, x) and moves it to the opposite end of the screen."""
 	if self.x > SCREENWIDTH + 30:
 		self.y = random.randrange(25, (SCREENHEIGHT - 25))
 		self.x = -20
@@ -452,8 +438,7 @@ def enemy_sweep(self):
 	
 def enemy_rammer(self):
 	"""Compares its x and y coordinates against the target and moves toward it.
-If the ship is respawning, the target is its own x and y of origin - it retreats.
-If the ship is NOT respawning, the ship is of course the target."""
+If the ship is respawning, the target is its own x and y of origin - it retreats. If the ship is NOT respawning, the ship is of course the target."""
 	self.cooldown = 5 #placeholder, keeps it from seeking AND shooting
 	selfX, selfY = self.rect.center
 	seekX, seekY = self.xy if ship.respawn else ship.rect.center
@@ -495,10 +480,11 @@ This should be used in concert with enemy_draw_teleport() which replaces enemy.d
 def enemy_draw_teleport(self):
 	"""Used in concert with enemy_teleport() to create a teleporter.
 At present, the draw method needs to be altered to create the "blink" effect of the enemy teleporting to a new location, so both unique_action() AND draw() need to be replaced. This might change later, since it's kind of dumb."""
-	if self.counter in range((FPS / 2), (FPS * 2)):
-		pygame.draw.rect(DISPLAYSURF, self.color, self.rect, 3)
-	elif self.counter % 5:
-		pygame.draw.rect(DISPLAYSURF, self.color, self.rect, 3)
+	if self.counter % 5 or self.counter in range((FPS / 2), (FPS * 2)):
+		turn = self.direction if self.direction is not '' else 'up'
+		self.drawImg = rotate_img(self.img, SPINNER[turn])
+		drawCtr = self.drawImg.get_rect(center=self.rect.center)
+		DISPLAYSURF.blit(self.drawImg, drawCtr)
 	else:
 		pass
 		
@@ -529,8 +515,6 @@ def enemy_boomer(self):
 		self.xy = (self.rect.center)
 		self.color = YELLOW		#not-so-great with sprites.
 		self.speed = 3
-		
-
 
 class GameHandler(object):
 
@@ -620,10 +604,9 @@ As levelCounter increments, so too does the stage and difficulty. Negative value
 			STARFIELDBG.update()
 			if collectScore:		#if collectScore, get the score
 				#while scoreString is short, display the characters.
-				#once it gets to be 3 characters long, add it to the
-				#score list, then sort it based on the scores, reverse it,
-				#and pop off any scores that are beyond the fifth score.
-				#finally, pickle and save if a new score is actually added.
+				#once it gets to be 3 characters long, add it to the score list, 
+				#then sort it based on the scores, reverse it, and pop off any scores 
+				#that are beyond the fifth score. finally, pickle and save if a new score is actually added.
 				if len(scoreString) < 3:
 					congratsObj, congratsRect = word_surf_and_rect('High score!  Enter your name, frunk destroyer.', GREEN)
 					congratsRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 10)
@@ -666,7 +649,6 @@ As levelCounter increments, so too does the stage and difficulty. Negative value
 			self.intro_loop()
 			self.level_loop()
 			self.game_over_loop()
-	
 
 class GameLoop(object):
 
@@ -676,12 +658,10 @@ class GameLoop(object):
 		self.allqueue = allqueue
 		self.enemiesInLevel = 3 + difficulty
 		shipX, shipY = int(ship.x), int(ship.y) #need integers because range() only takes ints
-		possibleAI = {
-					0:[False, False],
+		possibleAI = {0:[False, False],
 					1:[False, False],
 					2:[enemy_sweep, enemy_sweep],
-					3:[enemy_sweep, enemy_sweep]
-					} #the kinds of 'AI' the level can choose from.
+					3:[enemy_sweep, enemy_sweep]} #the kinds of 'AI' the level can choose from.
 		kindsOfAI = possibleAI[stage]
 		if difficulty >= 2:
 			kindsOfAI.append(enemy_teleport)
@@ -716,6 +696,7 @@ class GameLoop(object):
 				enemy.points = 300
 				enemy.speed = 2
 				enemy.color = GREEN
+				enemy.img = GREENSHIPIMG
 				enemy.draw = types.MethodType(enemy_draw_teleport, enemy)
 			self.badqueue.add(enemy)
 			self.allqueue.add(enemy)
@@ -740,14 +721,11 @@ class GameLoop(object):
 			
 			livesNumSurf, livesNumRect = word_surf_and_rect(str(ship.lives), WHITE, statsFont)
 			livesNumRect.topleft = (livesRect.topright[0] + 5, livesRect.topright[1])
-			blitqueue = [
-						(livesSurf, livesRect),
+			blitqueue = [(livesSurf, livesRect),
 						(livesNumSurf, livesNumRect),
 						(scoreSurf, scoreRect),
 						(scoreNumSurf, scoreNumRect),
-						(levelSurf, levelRect)
-						]
-
+						(levelSurf, levelRect)]
 			DISPLAYSURF.fill(BLACK)
 			STARFIELDBG.update()
 			for event in pygame.event.get(): #get player events and pass them to the ship's event handler
@@ -772,7 +750,6 @@ class GameLoop(object):
 						if otherthing in self.badqueue:	#only cares if object in goodqueue collides with
 							thing.got_hit()				#object in badqueue. prevents all manner of
 							otherthing.got_hit()		#friendly fire
-
 			for thing in self.allqueue:
 				thing.draw()
 			for blitdata in blitqueue:
