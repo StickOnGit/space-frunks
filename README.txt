@@ -1,14 +1,36 @@
-Hey, this is my first attempt at a cohesive Python project.
+Hey, this is my first attempt at a 'complete' Python project, as well as my first game.
 
-Space Frunks is a simple space shooter that simply goes and goes and goes and goes until you're out of guys. Think "Golden Age of Gaming". Think Robotron meets Asteroids, but you know, gimpy.
+Space Frunks is a simple space shooter that simply goes and goes and goes and goes until you're out of guys. Inspired by the Golden Age of gaming - think Robotron meets Asteroids, but you know, sophomoric.
 
-The controls are basic.  The mouse moves the ship; the 10-key pad fires in 8 directions(naturally, 5 is right out).  
+The controls are basic.  The mouse moves the ship; the 10-key pad fires in 8 directions. (sorry friends w/out 10-key: it's on my to-do list to assign several keys to firing)
 
-The bad guys - or 'frunks', I guess - just really don't want you in space, and so move in largely predictable patterns and fire in random directions to make you stop being in space.
+The bad guys - apparently a race of interstellar moving targets known as... 'frunks', I guess - just really don't want you in space, and so move in largely predictable patterns and fire in random directions to make you stop being in space.
 
 This game is written in Python 2.7 and requires PyGame.
 
-Present state of things:
+CHANGELOG:
+
+01/01/2014
+	NEW YEAR HAX
+	
+	- Added sprites! My brother is rad and supplied an original spritesheet.
+	- Press P to pause! The game stops, but the background continues to update. SO FANCY
+	- Cleaned up the naming practices. myMethod() is now my_method(), etc.
+	- Objects that 'seek' coordinates (rammers seeking your ship, your ship seeking mouse, and so on) should be using obj.rect.center now instead of obj.x and obj.y.
+	- Rammers return to their xy coordinates of origin whenever you die or can't be hit.
+	- Counters that should have counted distance traveled instead of just +=1'ing should do so now.
+	- Bullets now have a range attribute. Right now, this is used to tell them when to dissipate. They have a max range of the display surface's hypotenuse + 20, so that should always be enough to let them traverse the screen in any direction. They will still be auto-killed if is_out_of_bounds(bullet.rect.center) returns False.
+	- I always forget about screen-wrap when I make comments, so I erased a bunch of hard returns. -50 lines. O_o
+	- Python's ternary syntax is pretty much ruling my face right now.
+	
+	TODO:
+	
+	- Still want to get all those repeated while-loops out and just make every screen a Scene object.
+	- Sprites that are changing directions quickly and repeatedly have a bad case of the jitters. I need to flag them to not be rotated if they didn't move far enough, or something.
+	- That time.sleep() in the game_over loop is stupid. Should probably work similar to the pause feature, with a flag in the Level loop and a timer to return False and move on to the game over loop.
+	- I want events like firing bullets and scoring points to be less direct method calls from objects and more of an observer pattern thing. IMO it's a flaw that Enemy objects have code like 'ship.score += self.points', even though it's a one-liner and gets the job done.
+	- More diverse sprites are in the pipeline.
+	- Probably a good idea to get the draw methods out of the sprites and into whatever 'one view' I decide to write.
 
 12/17/13
 	GAME NOT DEAD JUST RESTING
