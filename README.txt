@@ -20,6 +20,8 @@ CHANGELOG:
 	- Rammers return to their xy coordinates of origin whenever you die or can't be hit.
 	- Counters that should have counted distance traveled instead of just +=1'ing should do so now.
 	- Bullets now have a range attribute. Right now, this is used to tell them when to dissipate. They have a max range of the display surface's hypotenuse + 20, so that should always be enough to let them traverse the screen in any direction. They will still be auto-killed if is_out_of_bounds(bullet.rect.center) returns False.
+	- Pretty much blowing up the global namespace. Maybe bad, don't care. Things like the starting level or the 'extra guys' threshold were buried in code, and they'll be easy to work with after an Options screen is built.
+	- Oh yeah I should build an Options screen.
 	- I always forget about screen-wrap when I make comments, so I erased a bunch of hard returns. -50 lines. O_o
 	- Python's ternary syntax is pretty much ruling my face right now.
 	
@@ -31,6 +33,7 @@ CHANGELOG:
 	- I want events like firing bullets and scoring points to be less direct method calls from objects and more of an observer pattern thing. IMO it's a flaw that Enemy objects have code like 'ship.score += self.points', even though it's a one-liner and gets the job done.
 	- More diverse sprites are in the pipeline.
 	- Probably a good idea to get the draw methods out of the sprites and into whatever 'one view' I decide to write.
+	- Mouse should probably have a helper sprite so you don't accidentally drag it out of the window.
 
 12/17/13
 	GAME NOT DEAD JUST RESTING

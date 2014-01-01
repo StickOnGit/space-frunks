@@ -47,7 +47,7 @@ FOURDIRS = ['up', 'down', 'left', 'right']
 EIGHTDIRS = ['up', 'down', 'left', 'right', 'upleft', 'upright', 'downleft', 'downright']
 SPINNER = {'up': 0, 'upright': -45, 'right': -90, 'downright': -135, 'down':180, 'downleft':135, 'left':90, 'upleft': 45}
 
-STARTINGLEVEL = 11
+STARTINGLEVEL = 0
 EARNEDEXTRAGUY = 8000
 
 DISPLAYSURF = pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
