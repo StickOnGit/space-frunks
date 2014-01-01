@@ -19,9 +19,11 @@ pygame.init()
 #global variables and syntactic sugar
 SCREENWIDTH = 640
 SCREENHEIGHT = 480
+SCREENDIAG = math.hypot(SCREENWIDTH, SCREENHEIGHT)
+
 GAMEFONT = pygame.font.Font('freesansbold.ttf', 24)
 FPS = 60
-fpsClock = pygame.time.Clock()
+FPSCLOCK = pygame.time.Clock()
 
 RED = (255, 0, 0)
 LIGHTRED = (255, 100, 100)
@@ -36,12 +38,14 @@ FOURDIRS = ['up', 'down', 'left', 'right']
 EIGHTDIRS = ['up', 'down', 'left', 'right', 'upleft', 'upright', 'downleft', 'downright']
 SPINNER = {'up': 0, 'upright': -45, 'right': -90, 'downright': -135, 'down':180, 'downleft':135, 'left':90, 'upleft': 45}
 
+STARTINGLEVEL = 16
+EARNEDEXTRAGUY = 8000
+
 DISPLAYSURF = pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
 pygame.display.set_caption('Space Frunks')
 pygame.mouse.set_visible(0)
 
-#tries to load hiscores. if exception, creates a default hiscore list
-try:
+try:	#tries to load hiscores. if *any* exception, creates a default hiscore list
 	f = open('scores.py', 'r')
 	rawScoreList = f.read()
 	scoreList = pickle.loads(rawScoreList)
@@ -50,7 +54,10 @@ except:
 	scoreList = [['NME', 15000], ['HAS', 12000], ['LDS', 10000], ['AKT', 8000], ['JTD', 5000]]
 
 #helpful standalone functions that just don't go anywhere in particular yet
-def loadSound(pathToSound, fileName):
+
+rotate_img = pygame.transform.rotate
+
+def load_sound(pathToSound, fileName):
 	"""Loads a sound file from a path relative to the main module's location."""
 	return pygame.mixer.Sound(os.path.join(pathToSound, fileName))
 	
@@ -58,7 +65,7 @@ def coinflip():
 	"""Randomly returns either True or False."""
 	return random.choice((True, False))
 	
-def newWordSurfAndRect(wordstring, wordcolor, wordfont=GAMEFONT):
+def word_surf_and_rect(wordstring, wordcolor, wordfont=GAMEFONT):
 	"""Returns a font Surface and a font Rect in a tuple.
 	
 	Arguments are: the string it's writing, the color tuple, and (optionally)the pygame.font.Font object."""
@@ -66,34 +73,24 @@ def newWordSurfAndRect(wordstring, wordcolor, wordfont=GAMEFONT):
 	wordRect = wordSurf.get_rect()
 	return wordSurf, wordRect
 	
-def isOutOfBounds(objRect, offset=15):
+def is_out_of_bounds(objRect, offset=15):
 	"""Takes a tuple and checks that it is within a certain range. Used to see if an object has gone too far
 	off the screen."""
 	try:
 		objX, objY = objRect
 	except:
-		raise ValueError("isOutOfBounds got something other than a two-value tuple.")
+		raise ValueError("is_out_of_bounds got something other than a two-value tuple.")
 	if objX < offset * -1 or objX > SCREENWIDTH + offset or objY < offset * -1 or objY > SCREENHEIGHT + offset:
 		return True
 	else:
 		return False
 
-spinIt = pygame.transform.rotate
-
-#def getDegree(spinningRect, seekingRect):
-#	"""Returns angle to spin an image to in order to face it correctly."""
-#	deltax = seekingRect[0] - spinningRect[0]
-#	deltay = seekingRect[1] - spinningRect[1]
-#	radians = math.atan2(-deltay, deltax)
-#	radians %= 2 * math.pi
-#	return math.degrees(radians)
-
 #loads sounds
-enemyDeadSound = loadSound('sounds', 'enemydead.wav')
-playerDeadSound = loadSound('sounds', 'playerdead.wav')
-teleportSound = loadSound('sounds', 'teleport.wav')
-enemyShotSound = loadSound('sounds', 'enemyshot.wav')
-playerShotSound = loadSound('sounds', 'playershot.wav')
+enemyDeadSound = load_sound('sounds', 'enemydead.wav')
+playerDeadSound = load_sound('sounds', 'playerdead.wav')
+teleportSound = load_sound('sounds', 'teleport.wav')
+enemyShotSound = load_sound('sounds', 'enemyshot.wav')
+playerShotSound = load_sound('sounds', 'playershot.wav')
 
 #don't load gameOver music... it's handled differently
 #load spritesheet
@@ -116,7 +113,7 @@ class Player(pygame.sprite.Sprite):
 		self.score = 0
 		self.extraGuyCounter = 1
 		
-	def newGamePrep(self):
+	def ready_new_game(self):
 		"""Gets the ship ready for a new game.
 		
 		Has static values for now, might change this to use variable values."""
@@ -127,9 +124,7 @@ class Player(pygame.sprite.Sprite):
 		self.extraGuyCounter = 1
 		self.rect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
 
-	def eventHandle(self, event):
-		#self.img = PLAYERSHIPIMG
-		#fire = False
+	def handle_event(self, event):
 		if event.type == KEYDOWN and self.cooldown == 0:
 			fire = False
 			if event.key == K_KP8:
@@ -157,15 +152,12 @@ class Player(pygame.sprite.Sprite):
 				fire = True
 				shotDirection = 'downright'
 			if fire:
-				#self.drawImg = self.imgs[1]
 				shotx, shoty = self.rect.center
 				shot = Bullet(shotx, shoty, shotDirection)
 				goodqueue.add(shot)
 				allqueue.add(shot)
 				self.cooldown = 10
 				playerShotSound.play()
-			#elif self.drawImg != self.imgs[0]:
-			#	self.drawImg = self.imgs[0]
 
 	def update(self):
 		"""Updates ship coordinates. Gets the difference between ship's current x and y position
@@ -187,9 +179,9 @@ class Player(pygame.sprite.Sprite):
 		if mouseX < shipX:
 			drawDir += 'left'
 		try:
-			self.drawImg = spinIt(self.img, SPINNER[drawDir])
+			self.drawImg = rotate_img(self.img, SPINNER[drawDir])
 		except KeyError:
-			self.drawImg = spinIt(self.img, SPINNER['up'])
+			self.drawImg = rotate_img(self.img, SPINNER['up'])
 		deltaX, deltaY = abs(shipX - mouseX), abs(shipY - mouseY)
 		xDirect = 1 if mouseX >= shipX else -1
 		yDirect = 1 if mouseY >= shipY else -1
@@ -208,7 +200,7 @@ class Player(pygame.sprite.Sprite):
 		self.rect.center = moveToX, moveToY
 		self.cooldown -= 1 if self.cooldown > 0 else 0
 		self.respawn -= 1 if self.respawn > 0 else 0
-		if self.score >= (8000 * self.extraGuyCounter):	#grants an extra life every X points
+		if self.score >= (EARNEDEXTRAGUY * self.extraGuyCounter):	#grants an extra life every X points
 			ship.lives += 1
 			self.extraGuyCounter += 1
 
@@ -256,19 +248,19 @@ class Enemy(pygame.sprite.Sprite):
 	def update(self):
 		"""Calls all the methods!
 		
-		Really probably any of them *could* be replaced, but .move() and .findRect() are
+		Really probably any of them *could* be replaced, but .move() and .find_rect() are
 		quite important and should probably normally be as-is."""
-		self.uniqueAction()
-		self.shotCheck()
+		self.unique_action()
+		self.shot_check()
 		self.move()
-		self.findRect()
+		self.find_rect()
 	
-	def uniqueAction(self):
+	def unique_action(self):
 		"""A hook for new movements. Replace this with new logic to change enemy behavior.
 		
 		This default action is to increment self.counter until it exceeds self.range.
 		When it does, reverse direction."""
-		if self.counter >= self.range or isOutOfBounds((self.x, self.y)):
+		if self.counter >= self.range or is_out_of_bounds(self.rect.center):
 			self.counter = 0
 			newDirection = ''
 			if 'up' in self.direction:
@@ -281,7 +273,7 @@ class Enemy(pygame.sprite.Sprite):
 				newDirection += 'left'
 			self.direction = newDirection
 		else:
-			self.counter += 1
+			self.counter += self.speed
 
 	def move(self):
 		"""Calculates the new position for the object.
@@ -303,14 +295,19 @@ class Enemy(pygame.sprite.Sprite):
 		if 'right' in self.direction:
 			self.x += speedConstant
 		
-	def findRect(self):
-		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
+	def find_rect(self):
+		#self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
+		xy = self.x, self.y
+		newRect = self.drawImg.get_bounding_rect()
+		newRect.topleft = xy
+		self.rect = newRect
 		#self.rect = self.drawImg.get_rect(center=self.rect.center)
 		
 	def draw(self):
-		#pygame.draw.rect(DISPLAYSURF, (self.color), (self.rect), 4)
+		turn = self.direction if self.direction is not '' else 'up'
+		pygame.draw.rect(DISPLAYSURF, (self.color), (self.rect), 4)
 		#drawCtr = self.drawImg.get_rect(center=self.rect.center)
-		self.drawImg = spinIt(self.img, SPINNER[self.direction])
+		self.drawImg = rotate_img(self.img, SPINNER[turn])
 		drawCtr = self.drawImg.get_rect(center=self.rect.center)
 		DISPLAYSURF.blit(self.drawImg, drawCtr)
 
@@ -324,7 +321,7 @@ class Enemy(pygame.sprite.Sprite):
 			self.kill()
 			enemyDeadSound.play()
 
-	def shotCheck(self):
+	def shot_check(self):
 		"""Determines when and if the object can attempt to fire.
 		
 		Once obj.cooldown reaches 0, gets a random number between 1 and obj.shotrate. If that number is
@@ -352,6 +349,8 @@ class Bullet(pygame.sprite.Sprite):
 		self.x = x
 		self.y = y
 		self.direction = direction
+		self.range = SCREENDIAG + 20
+		self.counter = 0
 		self.ownwidth = 4
 		self.ownheight = 4
 		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
@@ -370,11 +369,12 @@ class Bullet(pygame.sprite.Sprite):
 			self.x -= speedConstant
 		if 'right' in self.direction:
 			self.x += speedConstant
-		self.findRect()
-		if isOutOfBounds((self.x, self.y)):
+		self.find_rect()
+		self.counter += self.speed
+		if is_out_of_bounds(self.rect.center) or self.counter >= self.range:
 			self.kill()
 
-	def findRect(self):
+	def find_rect(self):
 		self.rect = pygame.Rect(self.x, self.y, self.ownwidth, self.ownheight)
 	
 	def draw(self):
@@ -390,13 +390,16 @@ badqueue = pygame.sprite.Group()
 allqueue = pygame.sprite.Group()
 
 class Starfield(object):
-	"""A starfield background."""
+	"""A starfield background. Stars fall from the top of the screen to the bottom, then they are replaced in a random X position back at the top. These stars are non-terminating, non-repeating."""
 	def __init__(self, stars=50):
 		self.stars = stars
 		self.starfield = []
-		self.addStars()
+		self.add_stars()
 		
-	def addStars(self, stars='_default'):
+	def add_stars(self, stars='_default'):
+		"""Adds X stars to self.starfield, which is just a list.
+		For some reason, an optional value can be passed to this to add a number of stars besides
+		self.stars."""
 		if stars is '_default':
 			stars = self.stars
 		for i in range(stars):
@@ -405,21 +408,19 @@ class Starfield(object):
 			self.starfield.append([x, y])
 
 	def update(self):
+		"""Draws stars which move down the screen. Creates a parallax effect by moving them at different speeds and with different colors. When a star goes offscreen, it is replaced at the top with a random X value."""
 		starCounter = 0
 		for star in self.starfield:
 			starCounter += 1
 			x, y = star
-			#parallax star effect - now with fancy 'faded' effect for faraway stars
 			star[1] += 1
 			starcolor = (120, 70, 70)
-
 			if starCounter % 3 == 1:
 				star[1] += 1
 				starcolor = (180, 100, 100)
 			if starCounter % 5 == 1:
 				star[1] += 1
 				starcolor = (240, 220, 220)
-		#when a star goes offscreen, reset it up top
 			if star[1] > SCREENHEIGHT:
 				star[1] = 0
 				x = random.randint(0, SCREENWIDTH)
@@ -430,7 +431,7 @@ STARFIELDBG = Starfield()
 
 #alternative patterns of movement for Enemy() added via strategy patterns, thanks AC
 
-def newSweeper(self):
+def enemy_sweep(self):
 	"""Ignores enemy.counter and simply allows the enemy to follow a straight line.
 	
 	If it goes too far out of bounds, gives it a new random position on the axis of
@@ -449,38 +450,37 @@ def newSweeper(self):
 		self.x = random.randrange(25, (SCREENWIDTH - 25))
 		self.y = SCREENHEIGHT + 20
 	
-def newRammer(self):
+def enemy_rammer(self):
 	"""Compares its x and y coordinates against the target and moves toward it.
-
-	If the ship is respawning, the target is its own x and y of origin - it retreats.
-	If the ship is NOT respawning, the ship is of course the target."""
+If the ship is respawning, the target is its own x and y of origin - it retreats.
+If the ship is NOT respawning, the ship is of course the target."""
 	self.cooldown = 5 #placeholder, keeps it from seeking AND shooting
-	selfx, selfy = self.rect.center
+	selfX, selfY = self.rect.center
 	seekX, seekY = self.xy if ship.respawn else ship.rect.center
 	newDirection = '' #this can safely be assigned to self.direction; it simply won't do anything.
-	if seekY > selfy:
-		newDirection += 'down'
-	elif seekY < selfy:
-		newDirection += 'up'
-	else:
-		pass
-	if seekX > selfx:
-		newDirection += 'right'
-	elif seekX < selfx:
-		newDirection += 'left'
+	absX = abs(selfX - seekX)
+	absY = abs(selfY - seekY)
+	if math.hypot(absX, absY) > self.speed:
+		if seekY > selfY and absY > self.speed:
+			newDirection += 'down'
+		elif seekY < selfY:
+			newDirection += 'up'
+		else:
+			pass
+		if seekX > selfX and absX > self.speed:
+			newDirection += 'right'
+		elif seekX < selfX:
+			newDirection += 'left'
+		else:
+			pass
 	else:
 		pass
 	self.direction = newDirection
 	
-def newTeleport(self):
-	"""This replaces uniqueAction.
-
-	Uses enemy.counter to countdown a teleport. When the timer reaches 0 (or less), 
-	a new position and direction for enemy is chosen and the counter is reset to
-	FPS * 3 -- in other words, it should wait 3 seconds before attempting to teleport again.
-	
-	This should be used in concert with newTeleDraw() which replaces enemy.draw() to achieve
-	a flickering effect before transport."""
+def enemy_teleport(self):
+	"""This replaces unique_action.
+Uses enemy.counter to countdown a teleport. When the timer reaches 0 (or less), a new position and direction for enemy is chosen and the counter is reset to FPS * 3 -- in other words, it should wait 3 seconds before attempting to teleport again.
+This should be used in concert with enemy_draw_teleport() which replaces enemy.draw() to achieve a flickering effect before transport."""
 	self.counter -= 1
 	if self.counter <= 0:
 		shipX, shipY = [int(x) for x in ship.rect.center]
@@ -492,12 +492,9 @@ def newTeleport(self):
 		self.counter = FPS * 3
 		teleportSound.play()
 		
-def newTeleDraw(self):
-	"""Used in concert with newTeleport() to create a teleporter.
-	
-	At present, the draw method needs to be altered to create the "blink" effect of the
-	enemy teleporting to a new location, so both uniqueAction() AND draw() need to be
-	replaced. This might change later, since it's kind of dumb."""
+def enemy_draw_teleport(self):
+	"""Used in concert with enemy_teleport() to create a teleporter.
+At present, the draw method needs to be altered to create the "blink" effect of the enemy teleporting to a new location, so both unique_action() AND draw() need to be replaced. This might change later, since it's kind of dumb."""
 	if self.counter in range((FPS / 2), (FPS * 2)):
 		pygame.draw.rect(DISPLAYSURF, self.color, self.rect, 3)
 	elif self.counter % 5:
@@ -505,16 +502,18 @@ def newTeleDraw(self):
 	else:
 		pass
 		
-def boomer(self):
+def enemy_boomer(self):
 	"""Comes in from the borders and then blows up for big damages."""
 	startX, startY = self.xy
 	if abs(startX - self.x) >= SCREENWIDTH / 2 or abs(startY - self.y) >= SCREENHEIGHT / 2:
 		self.speed = self.speed - 1 if self.speed > 0 else 0
 		self.color = tuple([color+15 if color < 230 else 255 for color in self.color])
 	if self.color == WHITE:
+		shotx, shoty = self.rect.center
 		for direction in EIGHTDIRS:
-			badBullet = Bullet(self.x, self.y, direction)
-			badBullet.speed = 4
+			badBullet = Bullet(shotx, shoty, direction)
+			badBullet.speed = 7
+			badBullet.range = 50
 			badBullet.color = LIGHTRED
 			badqueue.add(badBullet)
 			allqueue.add(badBullet)
@@ -527,9 +526,9 @@ def boomer(self):
 		if 'right' in self.direction:
 			self.x = -10
 			
-		self.xy = (self.x, self.y)
-		self.color = YELLOW		#maybe look into decorators or nesting a method
-		self.speed = 3			#to carry these old values around
+		self.xy = (self.rect.center)
+		self.color = YELLOW		#not-so-great with sprites.
+		self.speed = 3
 		
 
 
@@ -541,11 +540,11 @@ class GameHandler(object):
 		"""Establishes the text in the intro screen and waits for the user to initialize
 		a new game with the old 'Press Any Key' trick."""
 		titleFont = pygame.font.Font('freesansbold.ttf', 32)
-		titleSurf, titleRect = newWordSurfAndRect('Space Frunks', GREEN, titleFont)
+		titleSurf, titleRect = word_surf_and_rect('Space Frunks', GREEN, titleFont)
 		titleRect.center = (SCREENWIDTH / 2, (SCREENHEIGHT / 2) - 100)
 
 		menuFont = pygame.font.Font('freesansbold.ttf', 16)
-		menuSurf, menuRect = newWordSurfAndRect('Press any key to play', GREEN, menuFont)
+		menuSurf, menuRect = word_surf_and_rect('Press any key to play', GREEN, menuFont)
 		menuRect.center = (SCREENWIDTH / 2, (SCREENHEIGHT / 2) + 100)
 
 		waiting = True
@@ -561,22 +560,18 @@ class GameHandler(object):
 					sys.exit()
 				elif event.type == KEYDOWN: #prepare for new game
 					pygame.mouse.set_pos([SCREENWIDTH / 2, SCREENHEIGHT / 2])
-					ship.newGamePrep()
+					ship.ready_new_game()
 					goodqueue.add(ship)
 					allqueue.add(ship)
 					waiting = False
 			pygame.display.flip()
-			fpsClock.tick(FPS)
+			FPSCLOCK.tick(FPS)
 
 	def level_loop(self):
-		"""Determines the difficulty of the next level, and whether or not the game has ended or
-		progressed.
-		
-		As levelCounter increments, so too does the stage and difficulty.
-		Negative values are useless, since the game cycles through to the first level with
-		a nonzero number of badguys."""
+		"""Determines the difficulty of the next level, and whether or not the game has ended or progressed.
+As levelCounter increments, so too does the stage and difficulty. Negative values are useless, since the game cycles through to the first level with a nonzero number of badguys."""
 		gameOn = True
-		levelCounter = 0
+		levelCounter = STARTINGLEVEL
 		difficulty, stage = divmod(levelCounter, 4)
 		Level = GameLoop(difficulty, stage)
 		while gameOn:
@@ -589,9 +584,8 @@ class GameHandler(object):
 				gameOn = False
 
 	def game_over_loop(self):
-		#checks to see if your high score is good enough;
-		#if so, lets you record it - if not, displays older ones
-		gameOverSurf, gameOverRect = newWordSurfAndRect('GAME OVER', GREEN)
+		"""Checks to see if your high score is good enough; if so, lets you record it - if not, displays older ones."""
+		gameOverSurf, gameOverRect = word_surf_and_rect('GAME OVER', GREEN)
 		gameOverRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
 
 		DISPLAYSURF.blit(gameOverSurf, gameOverRect)
@@ -600,11 +594,9 @@ class GameHandler(object):
 		pygame.event.get() #get() empties event queue
 		for thing in allqueue:
 			thing.kill()
-		#set scoreString to empty in case of input.
-		#if ship.score is high enough, collectScore is set to True
-		scoreString = ''
+		scoreString = ''					#set scoreString to empty in case of input.
 		collectScore = False
-		if ship.score > scoreList[-1][1]:
+		if ship.score > scoreList[-1][1]:	#if ship.score is high enough, collectScore is set to True
 			collectScore = True
 		displayScores = True
 		pygame.mixer.music.load(os.path.join('sounds', 'gameover.wav'))
@@ -615,13 +607,10 @@ class GameHandler(object):
 					pygame.quit()
 					sys.exit()
 				elif event.type == KEYDOWN:
-					#handle keyboard events to allow for the same
-					#loop to both record the score, as well as
-					#kick the user back to the intro screen once
-					#the score entry is over. use isalnum() to keep
-					#scores 'letters and numbers only'
+					#handle keyboard events to allow for the same loop to both record the score, as well as
+					#kick the user back to the intro screen once the score entry is over.
 					if collectScore:
-						if str(event.unicode).isalnum():
+						if str(event.unicode).isalnum():	#keeps input limited to letters/numbers
 							scoreString += str(event.unicode).upper()
 						else:
 							pass
@@ -629,18 +618,16 @@ class GameHandler(object):
 						displayScores = False
 			DISPLAYSURF.fill(BLACK)
 			STARFIELDBG.update()
-			#if collectScore, get the score
-			#if not CollectScore, iterate over the scoreList and draw the scores
-			if collectScore:
+			if collectScore:		#if collectScore, get the score
 				#while scoreString is short, display the characters.
 				#once it gets to be 3 characters long, add it to the
 				#score list, then sort it based on the scores, reverse it,
 				#and pop off any scores that are beyond the fifth score.
-				#then pickle and save. only saves if a new score is actually added.
+				#finally, pickle and save if a new score is actually added.
 				if len(scoreString) < 3:
-					congratsObj, congratsRect = newWordSurfAndRect('High score!  Enter your name, frunk destroyer.', GREEN)
+					congratsObj, congratsRect = word_surf_and_rect('High score!  Enter your name, frunk destroyer.', GREEN)
 					congratsRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 10)
-					newScoreObj, newScoreRect = newWordSurfAndRect(scoreString, WHITE)
+					newScoreObj, newScoreRect = word_surf_and_rect(scoreString, WHITE)
 					newScoreRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
 					
 					DISPLAYSURF.blit(congratsObj, congratsRect)
@@ -662,16 +649,16 @@ class GameHandler(object):
 			else:
 				totalScores = 1
 				for name, score in scoreList:
-					nameSurf, nameRect = newWordSurfAndRect(name, GREEN, GAMEFONT)
+					nameSurf, nameRect = word_surf_and_rect(name, GREEN, GAMEFONT)
 					nameRect.center = (SCREENWIDTH / 3, (SCREENWIDTH / 8) * totalScores)
-					scoreSurf, scoreRect = newWordSurfAndRect(str(score), GREEN, GAMEFONT)
+					scoreSurf, scoreRect = word_surf_and_rect(str(score), GREEN, GAMEFONT)
 					scoreRect.center = (2*(SCREENWIDTH / 3), (SCREENWIDTH / 8) * totalScores)
 		
 					DISPLAYSURF.blit(nameSurf, nameRect)
 					DISPLAYSURF.blit(scoreSurf, scoreRect)
 					totalScores += 1
 			pygame.display.flip()
-			fpsClock.tick(FPS)
+			FPSCLOCK.tick(FPS)
 		pygame.mixer.music.stop()
 
 	def master_loop(self):		#the one loop that binds them all
@@ -692,14 +679,14 @@ class GameLoop(object):
 		possibleAI = {
 					0:[False, False],
 					1:[False, False],
-					2:[newSweeper, newSweeper],
-					3:[newSweeper, newSweeper]
+					2:[enemy_sweep, enemy_sweep],
+					3:[enemy_sweep, enemy_sweep]
 					} #the kinds of 'AI' the level can choose from.
 		kindsOfAI = possibleAI[stage]
 		if difficulty >= 2:
-			kindsOfAI.append(newTeleport)
+			kindsOfAI.append(enemy_teleport)
 		if difficulty >= 4:
-			kindsOfAI.append(newRammer)
+			kindsOfAI.append(enemy_rammer)
 		i = 0
 		while i < self.enemiesInLevel:
 			safex = range(10, (shipX - 25)) + range((shipX + 25), (SCREENWIDTH - 10))
@@ -711,25 +698,25 @@ class GameLoop(object):
 				if coinflip():
 					enemy.speed *= 1.05
 			newMovement = random.choice((kindsOfAI))
-			#newMovement = newSweeper
+			#newMovement = whatever_i'm_currently_testing
 			if not newMovement:
 				pass
 			else:
-				enemy.uniqueAction = types.MethodType(newMovement, enemy)
-			if newMovement == newSweeper:
+				enemy.unique_action = types.MethodType(newMovement, enemy)
+			if newMovement == enemy_sweep:
 				enemy.points = 150
 				enemy.color = YELLOW
 				if difficulty >=5 and coinflip() and coinflip():
-					enemy.shotCheck = types.MethodType(boomer, enemy)
-			elif newMovement == newRammer:
+					enemy.shot_check = types.MethodType(enemy_boomer, enemy)
+			elif newMovement == enemy_rammer:
 				enemy.points = 200
 				enemy.color = PURPLE
 				enemy.speed = 2
-			elif newMovement == newTeleport:
+			elif newMovement == enemy_teleport:
 				enemy.points = 300
 				enemy.speed = 2
 				enemy.color = GREEN
-				enemy.draw = types.MethodType(newTeleDraw, enemy)
+				enemy.draw = types.MethodType(enemy_draw_teleport, enemy)
 			self.badqueue.add(enemy)
 			self.allqueue.add(enemy)
 			i += 1
@@ -737,21 +724,21 @@ class GameLoop(object):
 	def play(self, difficulty, stage):
 		statsFont = pygame.font.Font('freesansbold.ttf', 18)
 		
-		scoreSurf, scoreRect = newWordSurfAndRect('Score:', WHITE, statsFont)
+		scoreSurf, scoreRect = word_surf_and_rect('Score:', WHITE, statsFont)
 		scoreRect.topleft = ((SCREENWIDTH / 20), (SCREENHEIGHT / 20))
 
-		livesSurf, livesRect = newWordSurfAndRect('Lives:', WHITE, statsFont)
+		livesSurf, livesRect = word_surf_and_rect('Lives:', WHITE, statsFont)
 		livesRect.topright = ((SCREENWIDTH - (SCREENWIDTH / 19)), (SCREENHEIGHT / 20))
 		#passing level here is fine, it doesn't change during gameplay without creating new Level object
-		levelSurf, levelRect = newWordSurfAndRect('Level %d - %d'%(difficulty + 1, stage + 1), WHITE, statsFont)
+		levelSurf, levelRect = word_surf_and_rect('Level %d - %d'%(difficulty + 1, stage + 1), WHITE, statsFont)
 		levelRect.center = ((SCREENWIDTH / 2), (SCREENHEIGHT / 20))
 		running = True
 		paused = False
 		while running:
-			scoreNumSurf, scoreNumRect = newWordSurfAndRect(str(ship.score), WHITE, statsFont)
+			scoreNumSurf, scoreNumRect = word_surf_and_rect(str(ship.score), WHITE, statsFont)
 			scoreNumRect.topleft = (scoreRect.topright[0] + 5, scoreRect.topright[1])
 			
-			livesNumSurf, livesNumRect = newWordSurfAndRect(str(ship.lives), WHITE, statsFont)
+			livesNumSurf, livesNumRect = word_surf_and_rect(str(ship.lives), WHITE, statsFont)
 			livesNumRect.topleft = (livesRect.topright[0] + 5, livesRect.topright[1])
 			blitqueue = [
 						(livesSurf, livesRect),
@@ -763,23 +750,19 @@ class GameLoop(object):
 
 			DISPLAYSURF.fill(BLACK)
 			STARFIELDBG.update()
-			#for thing in self.allqueue:
-			#	thing.draw()
-			#for blitdata in blitqueue:
-			#	DISPLAYSURF.blit(blitdata[0], blitdata[1])
 			for event in pygame.event.get(): #get player events and pass them to the ship's event handler
 				if event.type == QUIT:
 					pygame.quit()
 					sys.exit()
 				elif event.type == KEYDOWN:
-					ship.eventHandle(event)
+					ship.handle_event(event)
 					if event.key == K_p:
 						if not paused:
 							paused = True
 						elif paused:
 							paused = False
 			for thing in self.allqueue: #update everything, and check for collisions.
-				if not paused:
+				if not paused:			#...unless it's paused, of course
 					thing.update()
 				thing_hit_list = pygame.sprite.spritecollide(thing, self.allqueue, False)
 				if not thing_hit_list:
@@ -801,7 +784,7 @@ class GameLoop(object):
 			if not self.badqueue:	#return True to generate new level
 				running = False
 				return True
-			fpsClock.tick(FPS)
+			FPSCLOCK.tick(FPS)
 
 TheGame = GameHandler()
 
