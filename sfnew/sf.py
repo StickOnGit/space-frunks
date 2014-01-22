@@ -44,8 +44,10 @@ YELLOW = (255, 255, 0)
 WHITE = (255, 255, 255)
 
 FOURDIRS = ['up', 'down', 'left', 'right']
-EIGHTDIRS = ['up', 'down', 'left', 'right', 'upleft', 'upright', 'downleft', 'downright']
-SPINNER = {'up': 0, 'upright': -45, 'right': -90, 'downright': -135, 'down':180, 'downleft':135, 'left':90, 'upleft': 45}
+EIGHTDIRS = ['up', 'down', 'left', 'right',
+				'upleft', 'upright', 'downleft', 'downright']
+SPINNER = {'up': 0, 'upright': -45, 'right': -90, 'downright': -135, 
+			'down':180, 'downleft':135, 'left':90, 'upleft': 45}
 
 STARTINGLEVEL = 0
 EARNEDEXTRAGUY = 8000
@@ -60,7 +62,11 @@ try:	#tries to load hiscores. if *any* exception, creates a default hiscore list
 	scoreList = pickle.loads(rawScoreList)
 	f.close()
 except:
-	scoreList = [['NME', 15000], ['HAS', 12000], ['LDS', 10000], ['AKT', 8000], ['JTD', 5000]]
+	scoreList = [['NME', 15000], 
+				['HAS', 12000], 
+				['LDS', 10000], 
+				['AKT', 8000], 
+				['JTD', 5000]]
 
 #helpful standalone functions that just don't go anywhere in particular yet
 
@@ -76,14 +82,16 @@ def coinflip():
 	
 def word_surf_and_rect(wordstring, wordcolor, wordfont=GAMEFONT):
 	"""Returns a font Surface and a font Rect in a tuple.
-Arguments are: the string it's writing, the color tuple, and (optionally)the pygame.font.Font object."""
+	Arguments are: the string it's writing, the color tuple, and (optionally)
+	the pygame.font.Font object."""
 	wordSurf = wordfont.render(wordstring, True, wordcolor)
 	wordRect = wordSurf.get_rect()
 	return wordSurf, wordRect
 	
 def is_out_of_bounds(objRect, offset=15):
 	"""Used to see if an object has gone too far
-	off the screen. Can be optionally passed an 'offset' to alter just how far off the screen an object can live."""
+	off the screen. Can be optionally passed an 'offset' to alter just how 
+	far off the screen an object can live."""
 	try:
 		objX, objY = objRect
 	except:
@@ -126,7 +134,7 @@ class Player(pygame.sprite.Sprite):
 		
 	def ready_new_game(self):
 		"""Gets the ship ready for a new game.
-Has static values for now, might change this to use variable values."""
+		Has static values for now, might change this to use variable values."""
 		self.lives = 3
 		self.cooldown = 0
 		self.respawn = 0
@@ -314,7 +322,8 @@ Uses strings to determine which direction to move in, and uses a speed constant 
 
 	def shot_check(self):
 		"""Determines when and if the object can attempt to fire.
-Once obj.cooldown reaches 0, gets a random number between 1 and obj.shotrate. If that number is equal to obj.shotrate, it fires."""
+		Once obj.cooldown reaches 0, gets a random number between 1 and obj.shotrate.
+		If that number is equal to obj.shotrate, it fires."""
 		self.cooldown -= 1
 		if self.cooldown > 0:
 			pass
@@ -389,7 +398,7 @@ class Starfield(object):
 		
 	def add_stars(self, stars='_default'):
 		"""Adds X stars to self.starfield, which is just a list.
-For some reason, an optional value can be passed to this to add a number of stars besides self.stars."""
+		For some reason, an optional value can be passed to this to add a number of stars besides self.stars."""
 		if stars is '_default':
 			stars = self.stars
 		for i in range(stars):
@@ -422,7 +431,9 @@ STARFIELDBG = Starfield()
 #alternative patterns of movement for Enemy() added via strategy patterns, thanks AC
 def enemy_sweep(self):
 	"""Ignores enemy.counter and simply allows the enemy to follow a straight line.
-If it goes too far out of bounds, gives it a new random position on the axis of the boundary it didn't exit (if not x, y: if not y, x) and moves it to the opposite end of the screen."""
+	If it goes too far out of bounds, gives it a new random position on the axis of 
+	the boundary it didn't exit (if not x, y: if not y, x) and moves it to the 
+	opposite end of the screen."""
 	if self.x > SCREENWIDTH + 30:
 		self.y = random.randrange(25, (SCREENHEIGHT - 25))
 		self.x = -20
@@ -438,7 +449,8 @@ If it goes too far out of bounds, gives it a new random position on the axis of 
 	
 def enemy_rammer(self):
 	"""Compares its x and y coordinates against the target and moves toward it.
-If the ship is respawning, the target is its own x and y of origin - it retreats. If the ship is NOT respawning, the ship is of course the target."""
+	If the ship is respawning, the target is its own x and y of origin. 
+	If the ship is NOT respawning, the ship is of course the target."""
 	self.cooldown = 5 #placeholder, keeps it from seeking AND shooting
 	selfX, selfY = self.rect.center
 	seekX, seekY = self.xy if ship.respawn else ship.rect.center
@@ -464,8 +476,8 @@ If the ship is respawning, the target is its own x and y of origin - it retreats
 	
 def enemy_teleport(self):
 	"""This replaces unique_action.
-Uses enemy.counter to countdown a teleport. When the timer reaches 0 (or less), a new position and direction for enemy is chosen and the counter is reset to FPS * 3 -- in other words, it should wait 3 seconds before attempting to teleport again.
-This should be used in concert with enemy_draw_teleport() which replaces enemy.draw() to achieve a flickering effect before transport."""
+	Uses enemy.counter to countdown a teleport. When the timer reaches 0 (or less), a new position and direction for enemy is chosen and the counter is reset to FPS * 3 -- in other words, it should wait 3 seconds before attempting to teleport again.
+	This should be used in concert with enemy_draw_teleport() which replaces enemy.draw() to achieve a flickering effect before transport."""
 	self.counter -= 1
 	if self.counter <= 0:
 		shipX, shipY = [int(x) for x in ship.rect.center]
@@ -479,7 +491,7 @@ This should be used in concert with enemy_draw_teleport() which replaces enemy.d
 		
 def enemy_draw_teleport(self):
 	"""Used in concert with enemy_teleport() to create a teleporter.
-At present, the draw method needs to be altered to create the "blink" effect of the enemy teleporting to a new location, so both unique_action() AND draw() need to be replaced. This might change later, since it's kind of dumb."""
+	At present, the draw method needs to be altered to create the "blink" effect of the enemy teleporting to a new location, so both unique_action() AND draw() need to be replaced. This might change later, since it's kind of dumb."""
 	if self.counter % 5 or self.counter in range((FPS / 2), (FPS * 2)):
 		turn = self.direction if self.direction is not '' else 'up'
 		self.drawImg = rotate_img(self.img, SPINNER[turn])
@@ -552,8 +564,9 @@ class GameHandler(object):
 			FPSCLOCK.tick(FPS)
 
 	def level_loop(self):
-		"""Determines the difficulty of the next level, and whether or not the game has ended or progressed.
-As levelCounter increments, so too does the stage and difficulty. Negative values are useless, since the game cycles through to the first level with a nonzero number of badguys."""
+		"""Determines the difficulty of the next level, and whether or not 
+		the game has ended or progressed.
+		As levelCounter increments, so too does the stage and difficulty. Negative values are useless, since the game cycles through to the first level with a nonzero number of badguys."""
 		gameOn = True
 		levelCounter = STARTINGLEVEL
 		difficulty, stage = divmod(levelCounter, 4)
