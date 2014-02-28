@@ -116,7 +116,53 @@ REDSHIPIMG = ALLSHEET.image_at((0, 32, 32, 32), -1)
 GREENSHIPIMG = ALLSHEET.image_at((0, 64, 32, 32), -1)
 GOODGUYSHOT = ALLSHEET.image_at((0, 96, 32, 32), -1)
 BADGUYSHOT = ALLSHEET.image_at((32, 96, 32, 32), -1)
-	
+##explosion
+BOOMONE = ALLSHEET.image_at((0, 96, 32, 32), -1)
+BOOMTWO = ALLSHEET.image_at((32, 96, 32, 32), -1)
+BOOMTHR = ALLSHEET.image_at((64, 96, 32, 32), -1)
+BOOMFOR = ALLSHEET.image_at((96, 96, 32, 32), -1)
+BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR]
+
+class Explosion(pygame.sprite.Sprite):
+	def __init__(self, x, y):
+		pygame.sprite.Sprite.__init__(self)
+		self.x = x
+		self.y = y
+		self.imgs = BOOMLIST
+		self.counter = 0
+		self.imgindex = 0
+		self.allimgs = len(self.imgs)
+		self.drawImg = self.imgs[0]
+		self.rect = self.drawImg.get_rect()
+		
+	def update(self):
+		self.counter += 1
+		if self.counter % 3 == 2:
+			self.imgindex += 1
+		else: pass
+		if self.imgindex < self.allimgs:
+			self.drawImg = self.imgs[self.imgindex]
+			self.find_rect()
+		else:
+			self.kill()
+			
+	def draw(self):
+		drawCtr = self.drawImg.get_bounding_rect()
+		drawCtr.center = self.rect.center
+		DISPLAYSURF.blit(self.drawImg, drawCtr)
+		
+	def find_rect(self):
+		newRect = self.drawImg.get_bounding_rect()
+		newRect.topleft = self.x, self.y
+		self.rect = newRect
+		
+def make_explosion(obj, func):
+	def inner(*args, **kwargs):
+		allqueue.add(Explosion(obj.x, obj.y))
+		return func(*args, **kwargs)
+	return inner
+		
+
 class Player(pygame.sprite.Sprite):
 	def __init__(self, x, y):
 		pygame.sprite.Sprite.__init__(self)
@@ -192,10 +238,7 @@ Finally, counts down weapon cooldown, respawn (if needed), and checks to see if 
 			drawDir += 'right'
 		if mouseX < shipX:
 			drawDir += 'left'
-		try:
-			self.drawImg = rotate_img(self.img, SPINNER[drawDir])
-		except KeyError:
-			self.drawImg = rotate_img(self.img, SPINNER['up'])
+		self.drawImg = rotate_img(self.img, SPINNER.get(drawDir, 0))
 		deltaX, deltaY = abs(shipX - mouseX), abs(shipY - mouseY)
 		xDirect = 1 if mouseX >= shipX else -1
 		yDirect = 1 if mouseY >= shipY else -1
@@ -224,14 +267,10 @@ Finally, counts down weapon cooldown, respawn (if needed), and checks to see if 
 		if not self.respawn or (self.respawn <= FPS and (self.respawn % 5)):
 			drawCtr = self.drawImg.get_rect(center=self.rect.center)
 			DISPLAYSURF.blit(self.drawImg, drawCtr)
-		else:
-			pass
 
 	def got_hit(self):
 		"""Hook for controller's got_hit() call. Handles killing the ship and losing a life. Passes if ship is respawning."""
-		if self.respawn > 0:
-			pass
-		else:
+		if self.respawn <= 0:
 			self.respawn = FPS * 2
 			self.cooldown = FPS * 2
 			self.lives -= 1
@@ -299,40 +338,32 @@ Uses strings to determine which direction to move in, and uses a speed constant 
 			self.x += speedConstant
 		
 	def find_rect(self):
-		xy = self.x, self.y
 		newRect = self.drawImg.get_bounding_rect()
-		newRect.topleft = xy
+		newRect.topleft = self.x, self.y
 		self.rect = newRect
 		
 	def draw(self):
 		turn = self.direction if self.direction is not '' else 'up'
-		#pygame.draw.rect(DISPLAYSURF, (self.color), (self.rect), 4)
-		self.drawImg = rotate_img(self.img, SPINNER[turn])
+		self.drawImg = rotate_img(self.img, SPINNER.get(turn, 0))
 		drawCtr = self.drawImg.get_rect(center=self.rect.center)
 		DISPLAYSURF.blit(self.drawImg, drawCtr)
 
 	def got_hit(self):
-		"""Checks to see if the collision is just the player - if so, Enemy ignores it."""
-		if self.rect.colliderect(ship.rect):
-			pass
-		else:
-			ship.score += self.points #should change this
-			self.kill()
-			enemyDeadSound.play()
+		"""Simple hook to override got_hit in the event a badguy has 'hitpoints'
+		or some other effect."""
+		enemyDeadSound.play()
+		self.kill()
 
 	def shot_check(self):
 		"""Determines when and if the object can attempt to fire.
 		Once obj.cooldown reaches 0, gets a random number between 1 and obj.shotrate.
 		If that number is equal to obj.shotrate, it fires."""
 		self.cooldown -= 1
-		if self.cooldown > 0:
-			pass
-		else:
+		if self.cooldown <= 0:
 			shoot = random.randint(1, self.shotrate)
 			if shoot >= self.shotrate:
 				shotx, shoty = self.rect.center
-				shotDirection = random.choice(EIGHTDIRS)
-				badShot = Bullet(shotx, shoty, shotDirection)
+				badShot = Bullet(shotx, shoty, random.choice(EIGHTDIRS))
 				badShot.speed = 4
 				badShot.color = LIGHTRED
 				badqueue.add(badShot)
@@ -354,6 +385,7 @@ class Bullet(pygame.sprite.Sprite):
 		self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
 		self.speed = 10
 		self.color = GREEN
+		self.points = 0
 
 	def update(self):
 		speedConstant = self.speed
@@ -470,8 +502,6 @@ def enemy_rammer(self):
 			newDirection += 'left'
 		else:
 			pass
-	else:
-		pass
 	self.direction = newDirection
 	
 def enemy_teleport(self):
@@ -591,6 +621,7 @@ class GameHandler(object):
 		pygame.event.get() #get() empties event queue
 		for thing in allqueue:
 			thing.kill()
+		allqueue.empty()
 		scoreString = ''					#set scoreString to empty in case of input.
 		collectScore = False
 		if ship.score > scoreList[-1][1]:	#if ship.score is high enough, collectScore is set to True
@@ -684,33 +715,30 @@ class GameLoop(object):
 		while i < self.enemiesInLevel:
 			safex = range(10, (shipX - 25)) + range((shipX + 25), (SCREENWIDTH - 10))
 			safey = range(10, (shipY - 25)) + range((shipY + 25), (SCREENHEIGHT - 10))
-			x = random.choice(safex)
-			y = random.choice(safey)
-			enemy = Enemy(x, y)
+			enemy = Enemy(random.choice(safex), random.choice(safey))
 			for tick in range (0, difficulty):
 				if coinflip():
 					enemy.speed *= 1.05
 			newMovement = random.choice((kindsOfAI))
 			#newMovement = whatever_i'm_currently_testing
-			if not newMovement:
-				pass
-			else:
+			if newMovement:
 				enemy.unique_action = types.MethodType(newMovement, enemy)
-			if newMovement == enemy_sweep:
-				enemy.points = 150
-				enemy.color = YELLOW
-				if difficulty >=5 and coinflip() and coinflip():
-					enemy.shot_check = types.MethodType(enemy_boomer, enemy)
-			elif newMovement == enemy_rammer:
-				enemy.points = 200
-				enemy.color = PURPLE
-				enemy.speed = 2
-			elif newMovement == enemy_teleport:
-				enemy.points = 300
-				enemy.speed = 2
-				enemy.color = GREEN
-				enemy.img = GREENSHIPIMG
-				enemy.draw = types.MethodType(enemy_draw_teleport, enemy)
+				if newMovement == enemy_sweep:
+					enemy.points = 150
+					enemy.color = YELLOW
+					if difficulty >=5 and coinflip() and coinflip():
+						enemy.shot_check = types.MethodType(enemy_boomer, enemy)
+				elif newMovement == enemy_rammer:
+					enemy.points = 200
+					enemy.color = PURPLE
+					enemy.speed = 2
+				elif newMovement == enemy_teleport:
+					enemy.points = 300
+					enemy.speed = 2
+					enemy.color = GREEN
+					enemy.img = GREENSHIPIMG
+					enemy.draw = types.MethodType(enemy_draw_teleport, enemy)
+			enemy.kill = make_explosion(enemy, enemy.kill)
 			self.badqueue.add(enemy)
 			self.allqueue.add(enemy)
 			i += 1
@@ -752,17 +780,16 @@ class GameLoop(object):
 							paused = True
 						elif paused:
 							paused = False
-			for thing in self.allqueue: #update everything, and check for collisions.
-				if not paused:			#...unless it's paused, of course
-					thing.update()
-				thing_hit_list = pygame.sprite.spritecollide(thing, self.allqueue, False)
-				if not thing_hit_list:
-					pass
-				elif thing in self.goodqueue:
-					for otherthing in thing_hit_list:
-						if otherthing in self.badqueue:	#only cares if object in goodqueue collides with
-							thing.got_hit()				#object in badqueue. prevents all manner of
-							otherthing.got_hit()		#friendly fire
+			if not paused:
+				self.allqueue.update()
+				hit_list = pygame.sprite.groupcollide(self.goodqueue, self.badqueue, False, False)
+				for goodguy, badguys in hit_list.iteritems():
+					if goodguy is not ship:
+						for baddie in badguys:
+							baddie.got_hit()
+							ship.score += baddie.points
+					goodguy.got_hit()
+					
 			for thing in self.allqueue:
 				thing.draw()
 			for blitdata in blitqueue:
