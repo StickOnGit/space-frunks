@@ -84,7 +84,7 @@ def word_surf_and_rect(wordstring, wordcolor, wordfont=GAMEFONT):
 	"""Returns a font Surface and a font Rect in a tuple.
 	Arguments are: the string it's writing, the color tuple, and (optionally)
 	the pygame.font.Font object."""
-	wordSurf = wordfont.render(wordstring, True, wordcolor)
+	wordSurf = wordfont.render(str(wordstring), True, wordcolor)
 	wordRect = wordSurf.get_rect()
 	return wordSurf, wordRect
 	
@@ -133,7 +133,7 @@ class Explosion(pygame.sprite.Sprite):
 		self.imgindex = 0
 		self.allimgs = len(self.imgs)
 		self.drawImg = self.imgs[0]
-		self.rect = self.drawImg.get_rect()
+		self.rect = self.drawImg.get_rect(topleft=(self.x, self.y))
 		
 	def update(self):
 		self.counter += 1
@@ -161,6 +161,34 @@ def make_explosion(obj, func):
 		allqueue.add(Explosion(obj.x, obj.y))
 		return func(*args, **kwargs)
 	return inner
+	
+class PointsObj(pygame.sprite.Sprite):
+	def __init__(self, x, y, text='_default_', color=RED, font=GAMEFONT):
+		pygame.sprite.Sprite.__init__(self)
+		self.x = x
+		self.y = y
+		self.speed = 1
+		self.counter = FPS
+		self.text = str(text)
+		self.color = color
+		self.font = font
+		self.rect = pygame.Rect(self.x, self.y, 1, 1)
+	
+	def set_text(self, text):
+		self.text = str(text)
+	
+	def update(self):
+		self.counter -= 1
+		self.y -= self.speed
+		if self.counter < 0:
+			self.kill()
+		else:
+			self.rect.topleft = self.x, self.y 
+	
+	def draw(self):
+		to_blit = self.font.render(self.text, False, self.color)
+		self.rect = to_blit.get_rect(topleft=(self.x, self.y))
+		DISPLAYSURF.blit(to_blit, self.rect) 
 		
 
 class Player(pygame.sprite.Sprite):
@@ -275,6 +303,8 @@ Finally, counts down weapon cooldown, respawn (if needed), and checks to see if 
 			self.cooldown = FPS * 2
 			self.lives -= 1
 			playerDeadSound.play()
+		if not self.lives:
+			self.kill()
 
 class Enemy(pygame.sprite.Sprite):
 	def __init__(self, x, y):
@@ -611,18 +641,19 @@ class GameHandler(object):
 				gameOn = False
 
 	def game_over_loop(self):
-		"""Checks to see if your high score is good enough; if so, lets you record it - if not, displays older ones."""
-		gameOverSurf, gameOverRect = word_surf_and_rect('GAME OVER', GREEN)
+		"""Gets initials if you earned a hi-score. Displays scores."""
+		game_over = 'GAME OVER'
+		scoreString = ''					#set scoreString to empty in case of input.
+		
+		gameOverSurf, gameOverRect = word_surf_and_rect(game_over, GREEN)
 		gameOverRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
-
 		DISPLAYSURF.blit(gameOverSurf, gameOverRect)
 		pygame.display.flip()
-		time.sleep(2)
-		pygame.event.get() #get() empties event queue
+		#time.sleep(2)
+		pygame.event.get()					#get() empties event queue
 		for thing in allqueue:
 			thing.kill()
 		allqueue.empty()
-		scoreString = ''					#set scoreString to empty in case of input.
 		collectScore = False
 		if ship.score > scoreList[-1][1]:	#if ship.score is high enough, collectScore is set to True
 			collectScore = True
@@ -638,8 +669,9 @@ class GameHandler(object):
 					#handle keyboard events to allow for the same loop to both record the score, as well as
 					#kick the user back to the intro screen once the score entry is over.
 					if collectScore:
-						if str(event.unicode).isalnum():	#keeps input limited to letters/numbers
-							scoreString += str(event.unicode).upper()
+						next_char = str(event.unicode)
+						if next_char.isalnum():	#keeps input limited to letters/numbers
+							scoreString += next_char.upper()
 						else:
 							pass
 					else:
@@ -652,15 +684,17 @@ class GameHandler(object):
 				#then sort it based on the scores, reverse it, and pop off any scores 
 				#that are beyond the fifth score. finally, pickle and save if a new score is actually added.
 				if len(scoreString) < 3:
-					congratsObj, congratsRect = word_surf_and_rect('High score!  Enter your name, frunk destroyer.', GREEN)
+					congratsObj, congratsRect = word_surf_and_rect('High score!  Enter your name, frunk destroyer.', 
+					GREEN)
 					congratsRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 10)
-					newScoreObj, newScoreRect = word_surf_and_rect(scoreString, WHITE)
-					newScoreRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
+					
 					
 					DISPLAYSURF.blit(congratsObj, congratsRect)
-					try:
+					if scoreString:
+						newScoreObj, newScoreRect = word_surf_and_rect(scoreString, WHITE)
+						newScoreRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
 						DISPLAYSURF.blit(newScoreObj, newScoreRect)
-					except:
+					else:
 						pass	#why is this a try/except? hm cant remember
 				else:
 					scoreList.append([scoreString, ship.score])
@@ -678,7 +712,7 @@ class GameHandler(object):
 				for name, score in scoreList:
 					nameSurf, nameRect = word_surf_and_rect(name, GREEN, GAMEFONT)
 					nameRect.center = (SCREENWIDTH / 3, (SCREENWIDTH / 8) * totalScores)
-					scoreSurf, scoreRect = word_surf_and_rect(str(score), GREEN, GAMEFONT)
+					scoreSurf, scoreRect = word_surf_and_rect(score, GREEN, GAMEFONT)
 					scoreRect.center = (2*(SCREENWIDTH / 3), (SCREENWIDTH / 8) * totalScores)
 		
 					DISPLAYSURF.blit(nameSurf, nameRect)
@@ -745,6 +779,8 @@ class GameLoop(object):
 
 	def play(self, difficulty, stage):
 		statsFont = pygame.font.Font('freesansbold.ttf', 18)
+		ptsFont = pygame.font.Font('freesansbold.ttf', 10)
+		gameoverFont = pygame.font.Font('freesansbold.ttf', 36)
 		
 		scoreSurf, scoreRect = word_surf_and_rect('Score:', WHITE, statsFont)
 		scoreRect.topleft = ((SCREENWIDTH / 20), (SCREENHEIGHT / 20))
@@ -752,15 +788,21 @@ class GameLoop(object):
 		livesSurf, livesRect = word_surf_and_rect('Lives:', WHITE, statsFont)
 		livesRect.topright = ((SCREENWIDTH - (SCREENWIDTH / 19)), (SCREENHEIGHT / 20))
 		#passing level here is fine, it doesn't change during gameplay without creating new Level object
-		levelSurf, levelRect = word_surf_and_rect('Level %d - %d'%(difficulty + 1, stage + 1), WHITE, statsFont)
+		levelSurf, levelRect = word_surf_and_rect('Level %d - %d' % (difficulty + 1, stage + 1),
+													WHITE, statsFont)
 		levelRect.center = ((SCREENWIDTH / 2), (SCREENHEIGHT / 20))
+		
+		gameOverSurf, gameOverRect = word_surf_and_rect('G  A  M  E    O  V  E  R', GREEN, gameoverFont)
+		gameOverRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
+		
+		go_to_gameover = FPS * 3
 		running = True
 		paused = False
 		while running:
-			scoreNumSurf, scoreNumRect = word_surf_and_rect(str(ship.score), WHITE, statsFont)
+			scoreNumSurf, scoreNumRect = word_surf_and_rect(ship.score, WHITE, statsFont)
 			scoreNumRect.topleft = (scoreRect.topright[0] + 5, scoreRect.topright[1])
 			
-			livesNumSurf, livesNumRect = word_surf_and_rect(str(ship.lives), WHITE, statsFont)
+			livesNumSurf, livesNumRect = word_surf_and_rect(ship.lives, WHITE, statsFont)
 			livesNumRect.topleft = (livesRect.topright[0] + 5, livesRect.topright[1])
 			blitqueue = [(livesSurf, livesRect),
 						(livesNumSurf, livesNumRect),
@@ -786,16 +828,22 @@ class GameLoop(object):
 				for goodguy, badguys in hit_list.iteritems():
 					if goodguy is not ship:
 						for baddie in badguys:
+							if baddie.points:
+								allqueue.add(PointsObj(baddie.x, baddie.y, baddie.points, LIGHTRED, ptsFont))
+								ship.score += baddie.points
 							baddie.got_hit()
-							ship.score += baddie.points
+							#ship.score += baddie.points
 					goodguy.got_hit()
-					
+			
 			for thing in self.allqueue:
 				thing.draw()
 			for blitdata in blitqueue:
 				DISPLAYSURF.blit(blitdata[0], blitdata[1])
+			if not ship.lives:
+				go_to_gameover -= 1
+				DISPLAYSURF.blit(gameOverSurf, gameOverRect)
 			pygame.display.flip()
-			if not ship.lives:		#return False to go to gameover
+			if go_to_gameover <= 0:		#return False to go to gameover
 				running = False
 				return False
 			if not self.badqueue:	#return True to generate new level
