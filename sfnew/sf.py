@@ -134,6 +134,7 @@ class Explosion(pygame.sprite.Sprite):
 		self.allimgs = len(self.imgs)
 		self.drawImg = self.imgs[0]
 		self.rect = self.drawImg.get_rect(topleft=(self.x, self.y))
+		self.spin = random.choice(SPINNER.values())
 		
 	def update(self):
 		self.counter += 1
@@ -147,14 +148,12 @@ class Explosion(pygame.sprite.Sprite):
 			self.kill()
 			
 	def draw(self):
-		drawCtr = self.drawImg.get_bounding_rect()
-		drawCtr.center = self.rect.center
-		DISPLAYSURF.blit(self.drawImg, drawCtr)
+		shownImg = rotate_img(self.drawImg, self.spin)
+		drawCtr = shownImg.get_rect(center=self.rect.center)
+		DISPLAYSURF.blit(shownImg, drawCtr)
 		
 	def find_rect(self):
-		newRect = self.drawImg.get_bounding_rect()
-		newRect.topleft = self.x, self.y
-		self.rect = newRect
+		self.rect.topleft = self.x, self.y
 		
 def make_explosion(obj, func):
 	def inner(*args, **kwargs):
@@ -162,7 +161,7 @@ def make_explosion(obj, func):
 		return func(*args, **kwargs)
 	return inner
 	
-class PointsObj(pygame.sprite.Sprite):
+class TextObj(pygame.sprite.Sprite):
 	def __init__(self, x, y, text='_default_', color=RED, font=GAMEFONT):
 		pygame.sprite.Sprite.__init__(self)
 		self.x = x
@@ -172,23 +171,34 @@ class PointsObj(pygame.sprite.Sprite):
 		self.text = str(text)
 		self.color = color
 		self.font = font
-		self.rect = pygame.Rect(self.x, self.y, 1, 1)
+		self.rect = self.font.render(self.text, True, self.color).get_rect(topleft=(self.x, self.y))
 	
 	def set_text(self, text):
 		self.text = str(text)
+		self.rect = self.font.render(self.text, True, self.color).get_rect(topleft=(self.x, self.y))
+		
+	def set_ctr(self, newX, newY):
+		self.rect.center = newX, newY
+		self.x, self.y = self.rect.topleft
 	
 	def update(self):
-		self.counter -= 1
-		self.y -= self.speed
-		if self.counter < 0:
-			self.kill()
-		else:
-			self.rect.topleft = self.x, self.y 
+		pass 
 	
 	def draw(self):
-		to_blit = self.font.render(self.text, False, self.color)
+		to_blit = self.font.render(self.text, True, self.color)
 		self.rect = to_blit.get_rect(topleft=(self.x, self.y))
-		DISPLAYSURF.blit(to_blit, self.rect) 
+		DISPLAYSURF.blit(to_blit, self.rect)
+		
+def rising_points(obj, func):
+	def inner(*args, **kwargs):
+		obj.counter -= 1
+		obj.y -= obj.speed
+		if obj.counter < 0:
+			obj.kill()
+		else:
+			obj.rect.topleft = obj.x, obj.y
+		return func(*args, **kwargs)
+	return inner
 		
 
 class Player(pygame.sprite.Sprite):
@@ -252,9 +262,14 @@ class Player(pygame.sprite.Sprite):
 				playerShotSound.play()
 
 	def update(self):
-		"""Updates ship coordinates. Gets the difference between ship's current x and y position and the mouse's current x and y position; if the difference is less than ship.speed, it moves right to that spot. Else, just moves at a constant rate towards the mouse. Also sets rotation for 'self.drawImg' so it looks correct when moving.
-		
-Finally, counts down weapon cooldown, respawn (if needed), and checks to see if its point total grants it an extra life."""
+		"""Updates ship coordinates. 
+		Gets the difference between ship's x and y position 
+		and the mouse's current x and y position; if the difference 
+		is less than ship.speed, it moves right to that spot. Else, 
+		just moves at a constant rate towards the mouse. 
+		Also sets rotation for 'self.drawImg' so it looks correct when moving.
+		Finally, counts down weapon cooldown, respawn (if needed), 
+		and checks to see if its point total grants it an extra life."""
 		drawDir = ''
 		mouseX, mouseY = pygame.mouse.get_pos()
 		shipX, shipY = self.rect.center
@@ -435,7 +450,7 @@ class Bullet(pygame.sprite.Sprite):
 			self.kill()
 
 	def find_rect(self):
-		self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
+		self.rect.topleft = self.x, self.y
 	
 	def draw(self):
 		pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 2)
@@ -452,7 +467,10 @@ badqueue = pygame.sprite.Group()
 allqueue = pygame.sprite.Group()
 
 class Starfield(object):
-	"""A starfield background. Stars fall from the top of the screen to the bottom, then they are replaced in a random X position back at the top. These stars are non-terminating, non-repeating."""
+	"""A starfield background. 
+	Stars fall from the top of the screen to the bottom, 
+	then they are replaced in a random X position back at the top. 
+	These stars are non-terminating, non-repeating."""
 	def __init__(self, stars=50):
 		self.stars = stars
 		self.starfield = []
@@ -460,7 +478,8 @@ class Starfield(object):
 		
 	def add_stars(self, stars='_default'):
 		"""Adds X stars to self.starfield, which is just a list.
-		For some reason, an optional value can be passed to this to add a number of stars besides self.stars."""
+		For some reason, an optional value can be passed to this 
+		to add a number of stars besides self.stars."""
 		if stars is '_default':
 			stars = self.stars
 		for i in range(stars):
@@ -469,7 +488,10 @@ class Starfield(object):
 			self.starfield.append([x, y])
 
 	def update(self):
-		"""Draws stars which move down the screen. Creates a parallax effect by moving them at different speeds and with different colors. When a star goes offscreen, it is replaced at the top with a random X value."""
+		"""Draws stars which move down the screen. 
+		Creates a parallax effect by moving them at different speeds 
+		and with different colors. When a star goes offscreen, 
+		it is replaced at the top with a random X value."""
 		starCounter = 0
 		for star in self.starfield:
 			starCounter += 1
@@ -592,23 +614,29 @@ class GameHandler(object):
 
 	def __init__(self):
 		pass
+		
 	def intro_loop(self):
 		"""Establishes the text in the intro screen and waits for the user to initialize
 		a new game with the old 'Press Any Key' trick."""
+		menu_list = ['Press any key to play', 'Mouse moves ship', '10-keypad fires in 8 directions']
+		introqueue = pygame.sprite.Group()
+		
 		titleFont = pygame.font.Font('freesansbold.ttf', 32)
-		titleSurf, titleRect = word_surf_and_rect('Space Frunks', GREEN, titleFont)
-		titleRect.center = (SCREENWIDTH / 2, (SCREENHEIGHT / 2) - 100)
+		titleObj = TextObj(10, 10, 'Space Frunks', GREEN, titleFont)
+		titleObj.set_ctr(SCREENWIDTH / 2, (SCREENHEIGHT / 2) - 100)
 
 		menuFont = pygame.font.Font('freesansbold.ttf', 16)
-		menuSurf, menuRect = word_surf_and_rect('Press any key to play', GREEN, menuFont)
-		menuRect.center = (SCREENWIDTH / 2, (SCREENHEIGHT / 2) + 100)
-
+		menuObj = TextObj(10, 10, menu_list[0], GREEN, menuFont)
+		menuObj.set_ctr(SCREENWIDTH / 2, (SCREENHEIGHT / 2) + 100)
+		
+		menu_count = 0
+		introqueue.add(titleObj, menuObj)
 		waiting = True
 		while waiting:
 			DISPLAYSURF.fill(BLACK)
 			STARFIELDBG.update()
-			DISPLAYSURF.blit(titleSurf, titleRect)
-			DISPLAYSURF.blit(menuSurf, menuRect)
+			for word in introqueue:
+				word.draw()
 			
 			for event in pygame.event.get():
 				if event.type == QUIT:
@@ -620,13 +648,23 @@ class GameHandler(object):
 					goodqueue.add(ship)
 					allqueue.add(ship)
 					waiting = False
+			menu_count += 1
+			if menu_count % (FPS + 15) == 0:
+				nextmenu = menu_count / (FPS + 15)
+				if nextmenu >= len(menu_list):
+					menu_count = 0
+					nextmenu = 0
+				menuObj.set_text(menu_list[nextmenu])
+				menuObj.set_ctr(SCREENWIDTH / 2, (SCREENHEIGHT / 2) + 100)
 			pygame.display.flip()
 			FPSCLOCK.tick(FPS)
 
 	def level_loop(self):
-		"""Determines the difficulty of the next level, and whether or not 
-		the game has ended or progressed.
-		As levelCounter increments, so too does the stage and difficulty. Negative values are useless, since the game cycles through to the first level with a nonzero number of badguys."""
+		"""Determines the difficulty of the next level, 
+		and whether or not the game has ended or progressed.
+		As levelCounter increments, so too does the stage and difficulty.
+		Negative values are useless, since the game cycles through 
+		to the first level with a nonzero number of badguys."""
 		gameOn = True
 		levelCounter = STARTINGLEVEL
 		difficulty, stage = divmod(levelCounter, 4)
@@ -642,14 +680,7 @@ class GameHandler(object):
 
 	def game_over_loop(self):
 		"""Gets initials if you earned a hi-score. Displays scores."""
-		game_over = 'GAME OVER'
 		scoreString = ''					#set scoreString to empty in case of input.
-		
-		gameOverSurf, gameOverRect = word_surf_and_rect(game_over, GREEN)
-		gameOverRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
-		DISPLAYSURF.blit(gameOverSurf, gameOverRect)
-		pygame.display.flip()
-		#time.sleep(2)
 		pygame.event.get()					#get() empties event queue
 		for thing in allqueue:
 			thing.kill()
@@ -672,8 +703,7 @@ class GameHandler(object):
 						next_char = str(event.unicode)
 						if next_char.isalnum():	#keeps input limited to letters/numbers
 							scoreString += next_char.upper()
-						else:
-							pass
+						else: pass
 					else:
 						displayScores = False
 			DISPLAYSURF.fill(BLACK)
@@ -694,8 +724,7 @@ class GameHandler(object):
 						newScoreObj, newScoreRect = word_surf_and_rect(scoreString, WHITE)
 						newScoreRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
 						DISPLAYSURF.blit(newScoreObj, newScoreRect)
-					else:
-						pass	#why is this a try/except? hm cant remember
+					else: pass
 				else:
 					scoreList.append([scoreString, ship.score])
 					scoreList.sort(key=lambda x: x[1])
@@ -734,6 +763,7 @@ class GameLoop(object):
 		self.goodqueue = goodqueue
 		self.badqueue = badqueue
 		self.allqueue = allqueue
+		self.textqueue = pygame.sprite.Group()
 		self.enemiesInLevel = 3 + difficulty
 		shipX, shipY = int(ship.x), int(ship.y) #need integers because range() only takes ints
 		possibleAI = {0:[False, False],
@@ -745,8 +775,7 @@ class GameLoop(object):
 			kindsOfAI.append(enemy_teleport)
 		if difficulty >= 4:
 			kindsOfAI.append(enemy_rammer)
-		i = 0
-		while i < self.enemiesInLevel:
+		for i in range(0, self.enemiesInLevel):
 			safex = range(10, (shipX - 25)) + range((shipX + 25), (SCREENWIDTH - 10))
 			safey = range(10, (shipY - 25)) + range((shipY + 25), (SCREENHEIGHT - 10))
 			enemy = Enemy(random.choice(safex), random.choice(safey))
@@ -775,40 +804,34 @@ class GameLoop(object):
 			enemy.kill = make_explosion(enemy, enemy.kill)
 			self.badqueue.add(enemy)
 			self.allqueue.add(enemy)
-			i += 1
 
 	def play(self, difficulty, stage):
 		statsFont = pygame.font.Font('freesansbold.ttf', 18)
 		ptsFont = pygame.font.Font('freesansbold.ttf', 10)
 		gameoverFont = pygame.font.Font('freesansbold.ttf', 36)
 		
-		scoreSurf, scoreRect = word_surf_and_rect('Score:', WHITE, statsFont)
-		scoreRect.topleft = ((SCREENWIDTH / 20), (SCREENHEIGHT / 20))
+		scoreText = TextObj(SCREENWIDTH / 20, SCREENHEIGHT / 20, 'Score:', WHITE, statsFont)
+		scoreNumText = TextObj(scoreText.rect.topright[0] + 5, 
+								scoreText.rect.topright[1], ship.score, WHITE, statsFont)
 
-		livesSurf, livesRect = word_surf_and_rect('Lives:', WHITE, statsFont)
-		livesRect.topright = ((SCREENWIDTH - (SCREENWIDTH / 19)), (SCREENHEIGHT / 20))
-		#passing level here is fine, it doesn't change during gameplay without creating new Level object
-		levelSurf, levelRect = word_surf_and_rect('Level %d - %d' % (difficulty + 1, stage + 1),
-													WHITE, statsFont)
-		levelRect.center = ((SCREENWIDTH / 2), (SCREENHEIGHT / 20))
+		livesText = TextObj(20, 20, 'Lives:', WHITE, statsFont)
+		livesText.rect.topright = ((SCREENWIDTH - (SCREENWIDTH / 19)), (SCREENHEIGHT / 20))
+		livesText.x, livesText.y = livesText.rect.topleft
+		livesNumText = TextObj(livesText.rect.topright[0] + 5, 
+								livesText.rect.topright[1], ship.lives, WHITE, statsFont)
+								
+		levelText = TextObj(20, 20, 'Level %d - %d' % (difficulty + 1, stage + 1), WHITE, statsFont)
+		levelText.set_ctr((SCREENWIDTH / 2), (SCREENHEIGHT / 20))
 		
-		gameOverSurf, gameOverRect = word_surf_and_rect('G  A  M  E    O  V  E  R', GREEN, gameoverFont)
-		gameOverRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
+		self.textqueue.add(scoreText, scoreNumText, livesText, livesNumText, levelText)
+		
+		gameoverText = TextObj(20, 20, 'G  A  M  E    O  V  E  R', GREEN, gameoverFont)
+		gameoverText.set_ctr(SCREENWIDTH / 2, SCREENHEIGHT / 2)
 		
 		go_to_gameover = FPS * 3
 		running = True
 		paused = False
 		while running:
-			scoreNumSurf, scoreNumRect = word_surf_and_rect(ship.score, WHITE, statsFont)
-			scoreNumRect.topleft = (scoreRect.topright[0] + 5, scoreRect.topright[1])
-			
-			livesNumSurf, livesNumRect = word_surf_and_rect(ship.lives, WHITE, statsFont)
-			livesNumRect.topleft = (livesRect.topright[0] + 5, livesRect.topright[1])
-			blitqueue = [(livesSurf, livesRect),
-						(livesNumSurf, livesNumRect),
-						(scoreSurf, scoreRect),
-						(scoreNumSurf, scoreNumRect),
-						(levelSurf, levelRect)]
 			DISPLAYSURF.fill(BLACK)
 			STARFIELDBG.update()
 			for event in pygame.event.get(): #get player events and pass them to the ship's event handler
@@ -828,20 +851,24 @@ class GameLoop(object):
 				for goodguy, badguys in hit_list.iteritems():
 					if goodguy is not ship:
 						for baddie in badguys:
-							if baddie.points:
-								allqueue.add(PointsObj(baddie.x, baddie.y, baddie.points, LIGHTRED, ptsFont))
-								ship.score += baddie.points
 							baddie.got_hit()
-							#ship.score += baddie.points
+							if baddie not in self.badqueue and baddie.points:
+								pts = TextObj(baddie.x, baddie.y, baddie.points, LIGHTRED, ptsFont)
+								pts.update = rising_points(pts, pts.update)
+								allqueue.add(pts)
+								ship.score += baddie.points
+								scoreNumText.set_text(ship.score)
 					goodguy.got_hit()
 			
+			livesNumText.set_text(ship.lives)		#need wrapper/getter/something
+				
 			for thing in self.allqueue:
 				thing.draw()
-			for blitdata in blitqueue:
-				DISPLAYSURF.blit(blitdata[0], blitdata[1])
+			for thing in self.textqueue:
+				thing.draw()
 			if not ship.lives:
 				go_to_gameover -= 1
-				DISPLAYSURF.blit(gameOverSurf, gameOverRect)
+				self.textqueue.add(gameoverText)
 			pygame.display.flip()
 			if go_to_gameover <= 0:		#return False to go to gameover
 				running = False
@@ -851,7 +878,7 @@ class GameLoop(object):
 				return True
 			FPSCLOCK.tick(FPS)
 
-TheGame = GameHandler()
 
 if __name__ == "__main__":
+	TheGame = GameHandler()
 	TheGame.master_loop()
