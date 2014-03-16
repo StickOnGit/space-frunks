@@ -222,7 +222,7 @@ class Player(pygame.sprite.Sprite):
 		self.lives = 3
 		self.cooldown = 0
 		self.respawn = 0
-		self.score = 0
+		self.score = 7000
 		self.extraGuyCounter = 1
 		self.rect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
 
@@ -680,18 +680,25 @@ class GameHandler(object):
 
 	def game_over_loop(self):
 		"""Gets initials if you earned a hi-score. Displays scores."""
-		scoreString = ''					#set scoreString to empty in case of input.
+		playerInitials = TextObj(10, 10, '', WHITE, GAMEFONT)
+		playerInitials.set_ctr(SCREENWIDTH / 2, SCREENHEIGHT / 2)
+		congratsText = TextObj(10, 10, 'High score!  Enter your name, frunk destroyer.', GREEN, GAMEFONT)
+		congratsText.set_ctr(SCREENWIDTH / 2, SCREENHEIGHT / 10)
+		topScores = pygame.sprite.Group()
 		pygame.event.get()					#get() empties event queue
 		for thing in allqueue:
 			thing.kill()
 		allqueue.empty()
 		collectScore = False
+		scoremaking = True
 		if ship.score > scoreList[-1][1]:	#if ship.score is high enough, collectScore is set to True
 			collectScore = True
 		displayScores = True
 		pygame.mixer.music.load(os.path.join('sounds', 'gameover.wav'))
 		pygame.mixer.music.play(-1)
 		while displayScores:
+			DISPLAYSURF.fill(BLACK)
+			STARFIELDBG.update()
 			for event in pygame.event.get():
 				if event.type == QUIT:
 					pygame.quit()
@@ -702,31 +709,22 @@ class GameHandler(object):
 					if collectScore:
 						next_char = str(event.unicode)
 						if next_char.isalnum():	#keeps input limited to letters/numbers
-							scoreString += next_char.upper()
+							playerInitials.set_text(playerInitials.text + next_char.upper())
 						else: pass
 					else:
 						displayScores = False
-			DISPLAYSURF.fill(BLACK)
-			STARFIELDBG.update()
 			if collectScore:		#if collectScore, get the score
-				#while scoreString is short, display the characters.
+				#while playerInitials.text is short, display the characters.
 				#once it gets to be 3 characters long, add it to the score list, 
 				#then sort it based on the scores, reverse it, and pop off any scores 
 				#that are beyond the fifth score. finally, pickle and save if a new score is actually added.
-				if len(scoreString) < 3:
-					congratsObj, congratsRect = word_surf_and_rect('High score!  Enter your name, frunk destroyer.', 
-					GREEN)
-					congratsRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 10)
-					
-					
-					DISPLAYSURF.blit(congratsObj, congratsRect)
-					if scoreString:
-						newScoreObj, newScoreRect = word_surf_and_rect(scoreString, WHITE)
-						newScoreRect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
-						DISPLAYSURF.blit(newScoreObj, newScoreRect)
+				if len(playerInitials.text) < 3:
+					congratsText.draw()
+					if playerInitials.text:
+						playerInitials.draw()
 					else: pass
 				else:
-					scoreList.append([scoreString, ship.score])
+					scoreList.append([playerInitials.text, ship.score])
 					scoreList.sort(key=lambda x: x[1])
 					scoreList.reverse()
 					while len(scoreList) > 5:
@@ -738,15 +736,17 @@ class GameHandler(object):
 					collectScore = False
 			else:
 				totalScores = 1
-				for name, score in scoreList:
-					nameSurf, nameRect = word_surf_and_rect(name, GREEN, GAMEFONT)
-					nameRect.center = (SCREENWIDTH / 3, (SCREENWIDTH / 8) * totalScores)
-					scoreSurf, scoreRect = word_surf_and_rect(score, GREEN, GAMEFONT)
-					scoreRect.center = (2*(SCREENWIDTH / 3), (SCREENWIDTH / 8) * totalScores)
-		
-					DISPLAYSURF.blit(nameSurf, nameRect)
-					DISPLAYSURF.blit(scoreSurf, scoreRect)
-					totalScores += 1
+				while scoremaking:
+					for initials, hiscore in scoreList:
+						initialText = TextObj(0, 0, initials, GREEN, GAMEFONT)
+						initialText.set_ctr(SCREENWIDTH / 3, (SCREENWIDTH / 8) * totalScores)
+						hiscoreText = TextObj(0, 0, hiscore, GREEN, GAMEFONT)
+						hiscoreText.set_ctr(2*(SCREENWIDTH / 3), (SCREENWIDTH / 8) * totalScores)
+						topScores.add(initialText, hiscoreText)
+						totalScores += 1
+					scoremaking = False
+			for score in topScores:
+				score.draw()
 			pygame.display.flip()
 			FPSCLOCK.tick(FPS)
 		pygame.mixer.music.stop()
