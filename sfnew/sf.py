@@ -410,14 +410,18 @@ class Enemy(pygame.sprite.Sprite):
 		if self.cooldown <= 0:
 			shoot = random.randint(1, self.shotrate)
 			if shoot >= self.shotrate:
-				shotx, shoty = self.rect.center
-				badShot = Bullet(shotx, shoty, random.choice(EIGHTDIRS))
-				badShot.speed = 4
-				badShot.color = LIGHTRED
-				badqueue.add(badShot)
-				allqueue.add(badShot)
-				self.cooldown = FPS / 2
-				enemyShotSound.play()
+				self.fire()
+				
+	def fire(self):
+		"""Fires a shot in a random direction."""
+		shotx, shoty = self.rect.center
+		badShot = Bullet(shotx, shoty, random.choice(EIGHTDIRS))
+		badShot.speed = 4
+		badShot.color = LIGHTRED
+		badqueue.add(badShot)
+		allqueue.add(badShot)
+		self.cooldown = FPS / 2
+		enemyShotSound.play()
 
 class Bullet(pygame.sprite.Sprite):
 	"""Bullet object. When it hits things, they blows up."""
@@ -561,6 +565,8 @@ def rammer_strategy(obj):
 			else:
 				pass
 		obj.direction = newDirection
+	obj.speed -= 1
+	obj.points = 300
 	return inner
 		
 def teleport_strategy(obj):
@@ -582,6 +588,9 @@ def teleport_strategy(obj):
 			obj.direction = random.choice(FOURDIRS)
 			obj.counter = FPS * 3
 			teleportSound.play()
+	obj.img = GREENSHIPIMG
+	obj.points = 200
+	obj.speed -= 1
 	obj.draw = draw_teleport_strategy(obj)
 	return inner
 		
@@ -800,14 +809,21 @@ class GameLoop(object):
 			safex = range(10, (shipX - 25)) + range((shipX + 25), (SCREENWIDTH - 10))
 			safey = range(10, (shipY - 25)) + range((shipY + 25), (SCREENHEIGHT - 10))
 			enemy = Enemy(random.choice(safex), random.choice(safey))
-			for tick in xrange(0, difficulty):
-				if coinflip():
-					enemy.speed *= 1.05
+			pt_bonus = 0
 			newAI = random.choice((kindsOfAI))
 			#newAI = a_thing_to_test
 			if newAI:
 				enemy.unique_action = newAI(enemy)
 			enemy.kill = make_explosion(enemy, enemy.kill)
+			for tick in xrange(0, difficulty):
+				if coinflip():
+					enemy.speed *= 1.05
+					pt_bonus += 1
+			if pt_bonus:
+				total_bonus = 0
+				for inc in xrange(0, pt_bonus):
+					total_bonus += enemy.points / 10
+				enemy.points += total_bonus
 			self.badqueue.add(enemy)
 			self.allqueue.add(enemy)
 
