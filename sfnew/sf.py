@@ -888,6 +888,14 @@ class GameLoop(object):
 				thing.draw()
 			for thing in self.textqueue:
 				thing.draw()
+			if ship.lives > 0 and not ship.respawn:
+				#draws a box indicating the mouse position.
+				#shows where ship is going
+				cursorx, cursory = pygame.mouse.get_pos()
+				shipX, shipY = ship.rect.center
+				if math.hypot(abs(shipX - cursorx), abs(shipY - cursory)) > ship.speed:
+					cursorrgb = (random.randrange(60, 220), random.randrange(60, 220), random.randrange(60, 220))
+					pygame.draw.rect(DISPLAYSURF, cursorrgb, (cursorx - 3, cursory - 3, 9, 9), 1)
 			if not ship.lives:
 				go_to_gameover -= 1
 				self.textqueue.add(gameoverText)
