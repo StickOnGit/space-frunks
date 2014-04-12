@@ -9,6 +9,24 @@ The bad guys - apparently a race of interstellar moving targets known as... 'fru
 This game is written in Python 2.7 and requires PyGame.
 
 CHANGELOG:
+04/12/14
+	- Moved new version out of 'sfnew' folder, got rid of 'sfnew' folder. New main Python file is 'sf.py'.
+	- Added neat things like explosions on bad guy death and 'rising points' when they die
+	- Intro screen gives instructions on how to play if you just shup up and read and wait
+	- Neat flashy box shows you where the mouse is if it isn't under the Player
+	- For now points increment on bad guys if their speed increased before the level started.
+	- Super minor-league event object used to update certain parts of the game. I need to dicker with this a lot. Right now it is changing the text score for the ship and the lives score (good, good) and also I'm using it to create the Player's bullets (weird and probably bad). The latter was just to see if it would all work out okay, and it does, but I don't really like it.
+	- To facilitate the event object, Player class has these stupid methods for setting score and lives, and I hate them, but I guess you can't just wrap attribute assignment, which is poopy.
+	- I put text things in a class called "TextObj" which just lets me quit treating text so fucking weirdly, and more like the rest of the game objects - put them in the 'allqueue' which isn't tested for collisions, set their text only when I have to (hooray, events!) instead of every damn loop through the game's event polling, ta da.
+	
+	TODO:
+	- I think I like events better than some things that I'm just wrapping right now. Like Enemy.kill() is wrapped to create an Explosion on their (x, y) coordinates when they die, which is... not bad. But changing each Enemy() into a new instance of an enemy in this higher-order function way is apparently not very cool, oops. I had no idea! :/ So maybe those need to turn into separate classes, BOOOOOO
+	- The view still blows and is all over the place
+	- Still no Scene objects
+	- I'm still up and I have to work overtime starting at 4am, what am I doooooing to my liiiiife
+	- the RNG finally started giving me grief for having such lax requirements for Player position when the next level starts; I experienced the YASD, and I know I've been changed. My code hasn't, though. It should.
+	- Events have to be instantiated before they can be called and some things are global now which is dumb; in short I think I should try an make an event handler so that the scope of an object or its existing at the right time is less of an issue.
+	- Instantiating things is happening at weird times and requiring certain things to be summarily created at weird times in order to "just work". Namely the objects getting the "ship score changed" events. So yeah, that probs should change. Blah.
 
 01/01/2014
 	NEW YEAR HAX
