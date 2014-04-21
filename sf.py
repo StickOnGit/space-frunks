@@ -20,6 +20,7 @@ except:
 	import pickle
 
 #from pygame.locals import * #should probably get rid of this
+from stickavent.listenobj import ListenObj, eventhandler
 
 pygame.mixer.pre_init(44100, -16, 2, 2048) #fixes sound lag
 pygame.init()
@@ -165,9 +166,10 @@ def make_explosion(obj, func):
 		return func(*args, **kwargs)
 	return inner
 	
-class TextObj(pygame.sprite.Sprite):
+class TextObj(ListenObj, pygame.sprite.Sprite):
 	def __init__(self, x=0, y=0, text='_default_', color=RED, font=GAMEFONT):
 		pygame.sprite.Sprite.__init__(self)
+		ListenObj.__init__(self)
 		self.x = x
 		self.y = y
 		self.speed = 1
@@ -191,13 +193,6 @@ class TextObj(pygame.sprite.Sprite):
 	def set_ctr(self, newX, newY):
 		self.rect.center = newX, newY
 		self.x, self.y = self.rect.topleft
-		
-	#def change_with(self, obj, func):
-	#	def inner(*args, **kwargs):
-	#		self.set_text(obj.score)
-	#		#print "hey"
-	#		return func(*args, **kwargs)
-	#	return inner
 	
 	def update(self):
 		pass 
@@ -219,9 +214,10 @@ def rising_points(obj, func):
 	return inner
 		
 
-class Player(pygame.sprite.Sprite):
+class Player(ListenObj, pygame.sprite.Sprite):
 	def __init__(self, x, y):
 		pygame.sprite.Sprite.__init__(self)
+		ListenObj.__init__(self)
 		self.x = x
 		self.y = y
 		self.img = PLAYERSHIPIMG
@@ -238,13 +234,17 @@ class Player(pygame.sprite.Sprite):
 		"""Gets the ship ready for a new game.
 		Has static values for now, might change this to use variable values.
 		"""
-		self.lives = 3
-		updateLives(self.lives)
-		self.cooldown = 0
-		self.respawn = 0
-		self.set_score(0)
-		self.extraGuyCounter = 1
-		self.rect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
+		#self.lives = 3
+		#updateLives(self.lives)
+		#self.cooldown = 0
+		#self.respawn = 0
+		#self.set_score(0)
+		#self.extraGuyCounter = 1
+		self.__init__(SCREENWIDTH / 2, SCREENHEIGHT / 2)
+		#self.rect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
+		self.sub_to('newScore')
+		self.sub_to('newLives')
+		self.pub('newLives', self.lives)
 
 	def handle_event(self, event):
 		if event.type == pygame.KEYDOWN and self.cooldown == 0:
@@ -356,7 +356,8 @@ class Player(pygame.sprite.Sprite):
 		It's just self.lives += arg.
 		"""
 		self.lives += life
-		updateLives(self.lives)
+		#updateLives(self.lives)
+		self.pub('newLives', self.lives)
 
 class Enemy(pygame.sprite.Sprite):
 	def __init__(self, x, y, dirs=FOURDIRS):
@@ -700,7 +701,8 @@ livesNumText = TextObj(livesText.rect.topright[0] + 5,
 						WHITE, 
 						pygame.font.Font('freesansbold.ttf', 18))
 
-updateLives = Msg(livesNumText.set_text)
+#updateLives = Msg(livesNumText.set_text)
+livesNumText.sub_to('newLives', livesNumText.set_text)
 	
 
 ShotsFiredEvent = Msg(make_shot)
@@ -767,6 +769,8 @@ class GameHandler(object):
 		difficulty, stage = divmod(levelCounter, 4)
 		Level = GameLoop(difficulty, stage)
 		while gameOn:
+			print eventhandler._handler
+			eventhandler._handler._cleanse()
 			nextLevel = Level.play(difficulty, stage)
 			if nextLevel: 
 				levelCounter += 1	#use divmod() to determine next level's iteration and difficulty
