@@ -116,6 +116,11 @@ BOOMTHR = ALLSHEET.image_at((64, 96, 32, 32), -1)
 BOOMFOR = ALLSHEET.image_at((96, 96, 32, 32), -1)
 BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR]
 
+class ListenSprite(pygame.sprite.Sprite, ListenObj):
+	def __init__(self):
+		pygame.sprite.Sprite.__init__(self)
+		ListenObj.__init__(self)
+
 class Msg(list):
 	"""Subclass of 'list'. Calls methods in order of index."""
 	def __init__(self, *args):
@@ -214,10 +219,11 @@ def rising_points(obj, func):
 	return inner
 		
 
-class Player(ListenObj, pygame.sprite.Sprite):
+class Player(ListenSprite):
 	def __init__(self, x, y):
-		pygame.sprite.Sprite.__init__(self)
-		ListenObj.__init__(self)
+		#pygame.sprite.Sprite.__init__(self)
+		#ListenObj.__init__(self)
+		super(Player, self).__init__()
 		self.x = x
 		self.y = y
 		self.img = PLAYERSHIPIMG
@@ -229,6 +235,13 @@ class Player(ListenObj, pygame.sprite.Sprite):
 		self.lives = 3
 		self.score = 0
 		self.extraGuyCounter = 1
+		
+	def __setattr__(self, k, v):
+		super(Player, self).__setattr__(k, v)
+		#print k
+		if k in ['lives', 'score']:
+			print k
+			self.pub("new{}".format(k.capitalize()), v)
 		
 	def ready_new_game(self):
 		"""Gets the ship ready for a new game.
@@ -242,9 +255,9 @@ class Player(ListenObj, pygame.sprite.Sprite):
 		#self.extraGuyCounter = 1
 		self.__init__(SCREENWIDTH / 2, SCREENHEIGHT / 2)
 		#self.rect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
-		self.sub_to('newScore')
-		self.sub_to('newLives')
-		self.pub('newLives', self.lives)
+		#self.sub_to('newScore')
+		#self.sub_to('newLives')
+		#self.pub('newLives', self.lives)
 
 	def handle_event(self, event):
 		if event.type == pygame.KEYDOWN and self.cooldown == 0:
@@ -319,7 +332,8 @@ class Player(ListenObj, pygame.sprite.Sprite):
 		self.cooldown -= 1 if self.cooldown > 0 else 0
 		self.respawn -= 1 if self.respawn > 0 else 0
 		if self.score >= (EARNEDEXTRAGUY * self.extraGuyCounter):	#grants an extra life every X points
-			self.change_lives(1)
+			#self.change_lives(1)
+			self.lives += 1
 			self.extraGuyCounter += 1
 
 	def draw(self):
@@ -357,7 +371,7 @@ class Player(ListenObj, pygame.sprite.Sprite):
 		"""
 		self.lives += life
 		#updateLives(self.lives)
-		self.pub('newLives', self.lives)
+		#self.pub('newLives', self.lives)
 
 class Enemy(pygame.sprite.Sprite):
 	def __init__(self, x, y, dirs=FOURDIRS):
@@ -924,7 +938,8 @@ class GameLoop(object):
 		#scoreNumText.change_with(ship, ship.change_score)
 		#Score_Changed = Msg(ship.change_score, scoreNumText.set_text_as_int)
 		#newScore = Msg(scoreNumText.set_text)
-		updateAllScores = Msg(scoreNumText.set_text, ship.set_score)
+		scoreNumText.sub_to('newScore', scoreNumText.set_text)
+		#updateAllScores = Msg(scoreNumText.set_text, ship.set_score)
 		#updateLives = Msg(livesNumText.set_text)
 		while running:
 			DISPLAYSURF.fill(BLACK)
@@ -952,11 +967,12 @@ class GameLoop(object):
 								pts.set_ctr(baddie.rect.center[0],baddie.rect.center[1])
 								pts.update = rising_points(pts, pts.update)
 								allqueue.add(pts)
+								ship.score += baddie.points
 								#ship.change_score(baddie.points)
 								#scoreNumText.set_text(ship.score)
 								#Score_Changed(baddie.points)
 								#newScore(ship.score)
-								updateAllScores(ship.score + baddie.points)
+								#updateAllScores(ship.score + baddie.points)
 					goodguy.got_hit()
 				
 			for thing in self.allqueue:
@@ -978,6 +994,8 @@ class GameLoop(object):
 			if go_to_gameover <= 0:		#return False to go to gameover
 				return False
 			if not self.badqueue:	#return True to generate new level
+				scoreNumText.kill()
+				#self.textqueue.empty()
 				return True
 			FPSCLOCK.tick(FPS)
 
