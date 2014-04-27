@@ -120,18 +120,10 @@ class ListenSprite(pygame.sprite.Sprite, ListenObj):
 	def __init__(self):
 		pygame.sprite.Sprite.__init__(self)
 		ListenObj.__init__(self)
-
-class Msg(list):
-	"""Subclass of 'list'. Calls methods in order of index."""
-	def __init__(self, *args):
-		super(Msg, self).__init__(args)
-	
-	def __call__(self, *args, **kwargs):
-		for func in self:
-			func(*args, **kwargs)
-	
-	def __repr__(self):
-		return "Msg({})".format(list.__repr__(self))
+		
+	def kill(self):
+		self.unsub_all()
+		super(ListenSprite, self).kill()
 
 class Explosion(pygame.sprite.Sprite):
 	def __init__(self, x, y):
@@ -171,10 +163,9 @@ def make_explosion(obj, func):
 		return func(*args, **kwargs)
 	return inner
 	
-class TextObj(ListenObj, pygame.sprite.Sprite):
+class TextObj(ListenSprite):
 	def __init__(self, x=0, y=0, text='_default_', color=RED, font=GAMEFONT):
-		pygame.sprite.Sprite.__init__(self)
-		ListenObj.__init__(self)
+		super(TextObj, self).__init__()
 		self.x = x
 		self.y = y
 		self.speed = 1
@@ -187,13 +178,6 @@ class TextObj(ListenObj, pygame.sprite.Sprite):
 	def set_text(self, text):
 		self.text = str(text)
 		self.rect = self.font.render(self.text, True, self.color).get_rect(topleft=(self.x, self.y))
-		
-	def set_text_as_int(self, int_text):
-		try:
-			self.set_text(int(self.text) + int_text)
-		except ValueError:
-			raise ValueError("Tried to increment string in TextObj; numbers only")
-		#self.rect = self.font.render(self.text, True, self.color).get_rect(topleft=(self.x, self.y))
 		
 	def set_ctr(self, newX, newY):
 		self.rect.center = newX, newY
@@ -240,7 +224,7 @@ class Player(ListenSprite):
 		super(Player, self).__setattr__(k, v)
 		#print k
 		if k in ['lives', 'score']:
-			print k
+			#print k
 			self.pub("new{}".format(k.capitalize()), v)
 		
 	def ready_new_game(self):
@@ -255,8 +239,8 @@ class Player(ListenSprite):
 		#self.extraGuyCounter = 1
 		self.__init__(SCREENWIDTH / 2, SCREENHEIGHT / 2)
 		#self.rect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
-		#self.sub_to('newScore')
-		#self.sub_to('newLives')
+		#self.sub('newScore')
+		#self.sub('newLives')
 		#self.pub('newLives', self.lives)
 
 	def handle_event(self, event):
@@ -283,13 +267,13 @@ class Player(ListenSprite):
 				
 	def fire(self, shotDirection):
 		"""Fires a shot."""
-		#shotx, shoty = self.rect.center
-		#shot = Bullet(shotx, shoty, shotDirection)
-		#goodqueue.add(shot)
-		#allqueue.add(shot)
+		shotx, shoty = self.rect.center
+		shot = Bullet(shotx, shoty, shotDirection)
+		goodqueue.add(shot)
+		allqueue.add(shot)
 		self.cooldown = 10
 		playerShotSound.play()
-		ShotsFiredEvent(self, shotDirection)
+		#ShotsFiredEvent(self, shotDirection)
 
 	def update(self):
 		"""Updates ship coordinates. 
@@ -705,21 +689,8 @@ def make_shot(firing_obj, direction):
 		#allqueue.add(shot)
 		for queue in firing_obj.groups():
 			queue.add(shot)
-			
-livesText = TextObj(text='Lives:', color=WHITE, font=pygame.font.Font('freesansbold.ttf', 18))
-livesText.rect.topright = ((SCREENWIDTH - (SCREENWIDTH / 19)), (SCREENHEIGHT / 20))
-livesText.x, livesText.y = livesText.rect.topleft
-livesNumText = TextObj(livesText.rect.topright[0] + 5, 
-						livesText.rect.topright[1], 
-						ship.lives, 
-						WHITE, 
-						pygame.font.Font('freesansbold.ttf', 18))
 
-#updateLives = Msg(livesNumText.set_text)
-livesNumText.sub_to('newLives', livesNumText.set_text)
-	
-
-ShotsFiredEvent = Msg(make_shot)
+#ShotsFiredEvent = Msg(make_shot)
 
 class GameHandler(object):
 
@@ -873,7 +844,6 @@ class GameHandler(object):
 			self.game_over_loop()
 
 class GameLoop(object):
-
 	def __init__(self, difficulty, stage):
 		self.goodqueue = goodqueue
 		self.badqueue = badqueue
@@ -916,13 +886,13 @@ class GameLoop(object):
 		scoreText = TextObj(SCREENWIDTH / 20, SCREENHEIGHT / 20, 'Score:', WHITE, statsFont)
 		scoreNumText = TextObj(scoreText.rect.topright[0] + 5, 
 								scoreText.rect.topright[1], ship.score, WHITE, statsFont)
-		"""
+		
 		livesText = TextObj(text='Lives:', color=WHITE, font=statsFont)
 		livesText.rect.topright = ((SCREENWIDTH - (SCREENWIDTH / 19)), (SCREENHEIGHT / 20))
 		livesText.x, livesText.y = livesText.rect.topleft
 		livesNumText = TextObj(livesText.rect.topright[0] + 5, 
 								livesText.rect.topright[1], ship.lives, WHITE, statsFont)
-		"""
+		livesNumText.sub('newLives', livesNumText.set_text)
 								
 		levelText = TextObj(text='Level %d - %d' % (difficulty + 1, stage + 1), color=WHITE, font=statsFont)
 		levelText.set_ctr((SCREENWIDTH / 2), (SCREENHEIGHT / 20))
@@ -938,7 +908,7 @@ class GameLoop(object):
 		#scoreNumText.change_with(ship, ship.change_score)
 		#Score_Changed = Msg(ship.change_score, scoreNumText.set_text_as_int)
 		#newScore = Msg(scoreNumText.set_text)
-		scoreNumText.sub_to('newScore', scoreNumText.set_text)
+		scoreNumText.sub('newScore', scoreNumText.set_text)
 		#updateAllScores = Msg(scoreNumText.set_text, ship.set_score)
 		#updateLives = Msg(livesNumText.set_text)
 		while running:
@@ -968,11 +938,6 @@ class GameLoop(object):
 								pts.update = rising_points(pts, pts.update)
 								allqueue.add(pts)
 								ship.score += baddie.points
-								#ship.change_score(baddie.points)
-								#scoreNumText.set_text(ship.score)
-								#Score_Changed(baddie.points)
-								#newScore(ship.score)
-								#updateAllScores(ship.score + baddie.points)
 					goodguy.got_hit()
 				
 			for thing in self.allqueue:
@@ -989,13 +954,14 @@ class GameLoop(object):
 					pygame.draw.rect(DISPLAYSURF, cursorrgb, (cursorx - 3, cursory - 3, 9, 9), 1)
 			if not ship.lives:
 				go_to_gameover -= 1
-				self.textqueue.add(gameoverText)
+				if gameoverText not in self.textqueue:
+					self.textqueue.add(gameoverText)
 			pygame.display.flip()
 			if go_to_gameover <= 0:		#return False to go to gameover
+				self.textqueue.empty()
 				return False
 			if not self.badqueue:	#return True to generate new level
-				scoreNumText.kill()
-				#self.textqueue.empty()
+				self.textqueue.empty()
 				return True
 			FPSCLOCK.tick(FPS)
 
