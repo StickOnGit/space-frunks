@@ -9,6 +9,17 @@ The bad guys - apparently a race of interstellar moving targets known as... 'fru
 This game is written in Python 2.7 and requires PyGame.
 
 CHANGELOG:
+04/27/14
+	- Swapped out my old event objects, put in new pubsub library that I wrote. Yay. Fixes issues where the objects had to be created at dumb times; objects just subscribe to events and publish events and stuff, and it's good.
+	- Player ship has an animation on death now.
+	- Player creates its own shots again instead of firing an event to a thing that makes them.
+	
+	TODO:
+	- STILL NO SCENES. I dislike that code very much a lot.
+	- I'm getting to the point where the code repetition is just bugging the hell out of me, but also I am lazy and I don't want to just pass all that from a base class because it changes a lot from object to object. To that end, I should probably stop changing things from object to object so much.
+	- Powerups would be cool maybe, but that's moar content. NEED FOCUS
+	- ...I want a more better font :/
+
 04/12/14
 	- Moved new version out of 'sfnew' folder, got rid of 'sfnew' folder. New main Python file is 'sf.py'.
 	- Added neat things like explosions on bad guy death and 'rising points' when they die

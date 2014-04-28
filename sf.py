@@ -701,13 +701,10 @@ def enemy_boomer(self):
 def make_shot(firing_obj, direction):
 		shotx, shoty = firing_obj.rect.center
 		shot = Bullet(shotx, shoty, direction)
-		#goodqueue.add(shot)
-		#allqueue.add(shot)
 		for queue in firing_obj.groups():
 			queue.add(shot)
 
 class GameHandler(object):
-
 	def __init__(self):
 		pass
 		
@@ -734,7 +731,6 @@ class GameHandler(object):
 			STARFIELDBG.update()
 			for word in introqueue:
 				word.draw()
-			
 			for event in pygame.event.get():
 				if event.type == pygame.QUIT:
 					pygame.quit()
