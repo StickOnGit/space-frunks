@@ -14,13 +14,11 @@ import sys
 import time
 import spritesheet
 import math
+from stickavent.listenobj import ListenObj, eventhandler
 try:
 	import cPickle as pickle
 except:
 	import pickle
-
-#from pygame.locals import * #should probably get rid of this
-from stickavent.listenobj import ListenObj, eventhandler
 
 pygame.mixer.pre_init(44100, -16, 2, 2048) #fixes sound lag
 pygame.init()
@@ -66,7 +64,7 @@ except:
 				['HAS', 12000], 
 				['LDS', 10000], 
 				['AKT', 8000], 
-				['JTD', 5000]]
+				['JAS', 5000]]
 
 #helpful standalone functions that just don't go anywhere in particular yet
 
@@ -85,10 +83,7 @@ def is_out_of_bounds(objRect, offset=15):
 	off the screen. Can be optionally passed an 'offset' to alter just how 
 	far off the screen an object can live.
 	"""
-	try:
-		objX, objY = objRect
-	except:
-		raise ValueError("is_out_of_bounds got something other than a two-value tuple.")
+	objX, objY = objRect
 	if objX < offset * -1 or objX > SCREENWIDTH + offset or objY < offset * -1 or objY > SCREENHEIGHT + offset:
 		return True
 	else:
@@ -132,7 +127,6 @@ class Explosion(pygame.sprite.Sprite):
 		self.y = y
 		self.imgs = BOOMLIST
 		self.counter = 0
-		self.imgindex = 0
 		self.allimgs = len(self.imgs)
 		self.drawImg = self.imgs[0]
 		self.rect = self.drawImg.get_rect(topleft=(self.x, self.y))
@@ -140,11 +134,9 @@ class Explosion(pygame.sprite.Sprite):
 		
 	def update(self):
 		self.counter += 1
-		if self.counter % 3 == 2:
-			self.imgindex += 1
-		else: pass
-		if self.imgindex < self.allimgs:
-			self.drawImg = self.imgs[self.imgindex]
+		imgindex = self.counter / 3
+		if imgindex < self.allimgs:
+			self.drawImg = self.imgs[imgindex]
 			self.find_rect()
 		else:
 			self.kill()
@@ -205,15 +197,13 @@ def rising_points(obj, func):
 
 class Player(ListenSprite):
 	def __init__(self, x, y):
-		#pygame.sprite.Sprite.__init__(self)
-		#ListenObj.__init__(self)
 		super(Player, self).__init__()
 		self.x = x
 		self.y = y
 		self.img = PLAYERSHIPIMG
 		self.drawImg = self.img
 		self.speed = 4
-		self.rect = self.drawImg.get_bounding_rect()
+		self.rect = self.img.get_rect(center=(self.x, self.y))
 		self.cooldown = 0
 		self.respawn = 0
 		self.lives = 3
@@ -221,27 +211,18 @@ class Player(ListenSprite):
 		self.extraGuyCounter = 1
 		
 	def __setattr__(self, k, v):
+		"""Auto-publishes message when the items in the list are updated.
+		Message is 'new' + the attribute changed; 'newScore' or 'newLives', etc.
+		"""
 		super(Player, self).__setattr__(k, v)
-		#print k
 		if k in ['lives', 'score']:
-			#print k
 			self.pub("new{}".format(k.capitalize()), v)
 		
 	def ready_new_game(self):
 		"""Gets the ship ready for a new game.
 		Has static values for now, might change this to use variable values.
 		"""
-		#self.lives = 3
-		#updateLives(self.lives)
-		#self.cooldown = 0
-		#self.respawn = 0
-		#self.set_score(0)
-		#self.extraGuyCounter = 1
 		self.__init__(SCREENWIDTH / 2, SCREENHEIGHT / 2)
-		#self.rect.center = (SCREENWIDTH / 2, SCREENHEIGHT / 2)
-		#self.sub('newScore')
-		#self.sub('newLives')
-		#self.pub('newLives', self.lives)
 
 	def handle_event(self, event):
 		if event.type == pygame.KEYDOWN and self.cooldown == 0:
@@ -273,7 +254,6 @@ class Player(ListenSprite):
 		allqueue.add(shot)
 		self.cooldown = 10
 		playerShotSound.play()
-		#ShotsFiredEvent(self, shotDirection)
 
 	def update(self):
 		"""Updates ship coordinates. 
@@ -301,8 +281,8 @@ class Player(ListenSprite):
 		xDirect = 1 if mouseX >= shipX else -1
 		yDirect = 1 if mouseY >= shipY else -1
 		if deltaX >= 1 and deltaY >= 1:
-			xDirect /= 1.2
-			yDirect /= 1.2
+			xDirect /= 1.4
+			yDirect /= 1.4
 		if deltaX < self.speed:
 			moveToX = mouseX
 		else:
@@ -316,7 +296,6 @@ class Player(ListenSprite):
 		self.cooldown -= 1 if self.cooldown > 0 else 0
 		self.respawn -= 1 if self.respawn > 0 else 0
 		if self.score >= (EARNEDEXTRAGUY * self.extraGuyCounter):	#grants an extra life every X points
-			#self.change_lives(1)
 			self.lives += 1
 			self.extraGuyCounter += 1
 
@@ -335,31 +314,72 @@ class Player(ListenSprite):
 		if self.respawn <= 0:
 			self.respawn = FPS * 2
 			self.cooldown = FPS * 2
-			self.change_lives(-1)
+			self.lives -= 1
 			playerDeadSound.play()
+			imgX, imgY = self.rect.topleft
+			halfw = self.drawImg.get_rect().width / 2
+			halfh = self.drawImg.get_rect().height / 2
+			for index, piece in enumerate([(x, y) for x in (0, halfw) for y in (0, halfh)]):
+				BustedRect = pygame.Rect(piece[0], piece[1], halfw, halfh)
+				BustedPiece = ShipPiece(imgX, imgY, self.drawImg.subsurface(BustedRect), ['upleft', 'downleft', 'upright', 'downright'][index])
+				allqueue.add(BustedPiece)
+				
 		if not self.lives:
 			self.kill()
 			
-	def change_score(self, pts):
-		"""Hook to wrap score changes.
-		It's just self.score += arg.
-		"""
-		self.score += pts
+class ShipPiece(ListenSprite):
+	def __init__(self, x, y, img_piece, direction):
+		super(ShipPiece, self).__init__()
+		self.x = x
+		self.y = y
+		self.img_piece = img_piece
+		self.direction = direction
+		self.rect = img_piece.get_rect(topleft=(self.x, self.y))
+		self.speed = 1
+		self.counter = FPS * 0.75
 	
-	def set_score(self, newscore):
-		self.score = newscore
+	def update(self):
+		self.counter -= 1
+		if self.counter <= 0:
+			self.kill()
+		else:
+			self.move()
+			self.find_rect()
+			self.draw()
 		
-	def change_lives(self, life):
-		"""Hook to wrap life changes.
-		It's just self.lives += arg.
+	def move(self):
+		"""Calculates the new position for the object.
+		Uses strings to determine which direction to move in, 
+		and a speedConstant to determine how many pixels in that direction to move.
+		A 'diagonal string' ('upleft', 'downright', etc) will cause it to divide 
+		speedConstant by 1.4, because Pythagorus and whatnot.
 		"""
-		self.lives += life
-		#updateLives(self.lives)
-		#self.pub('newLives', self.lives)
+		speedConstant = self.speed
+		if len(self.direction) > 5:
+			speedConstant /= 1.4
+		if 'up' in self.direction:
+			self.y -= speedConstant
+		if 'down' in self.direction:
+			self.y += speedConstant
+		if 'left' in self.direction:
+			self.x -= speedConstant
+		if 'right' in self.direction:
+			self.x += speedConstant
+		
+	def find_rect(self):
+		newRect = self.img_piece.get_bounding_rect()
+		newRect.topleft = self.x, self.y
+		self.rect = newRect
+		
+	def draw(self):
+		if self.counter % 3 == 1:
+			drawCtr = self.img_piece.get_rect(center=self.rect.center)
+			DISPLAYSURF.blit(self.img_piece, drawCtr)
 
-class Enemy(pygame.sprite.Sprite):
+
+class Enemy(ListenSprite):
 	def __init__(self, x, y, dirs=FOURDIRS):
-		pygame.sprite.Sprite.__init__(self)
+		super(Enemy, self).__init__()
 		self.x = x
 		self.y = y
 		self.img = ALLSHEET.image_at((32, 32, 32, 32), -1)
@@ -369,10 +389,7 @@ class Enemy(pygame.sprite.Sprite):
 		self.range = random.randrange(60, 120)
 		self.counter = random.randrange(0, self.range)
 		self.direction = random.choice(dirs)
-		self.width = 15
-		self.height = 15
-		self.color = BLUE
-		self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
+		self.rect = self.drawImg.get_rect(topleft=(self.x, self.y))
 		self.speed = 3
 		self.cooldown = FPS / 2
 		self.points = 100
@@ -494,7 +511,7 @@ class Bullet(pygame.sprite.Sprite):
 			self.x += speedConstant
 		self.find_rect()
 		self.counter += self.speed
-		if is_out_of_bounds(self.rect.center) or self.counter >= self.range:
+		if is_out_of_bounds(self.rect.center, offset=50) or self.counter >= self.range:
 			self.kill()
 
 	def find_rect(self):
@@ -678,9 +695,6 @@ def enemy_boomer(self):
 		self.origin = (self.rect.center)
 		self.color = YELLOW		#not-so-great with sprites.
 		self.speed = 3
-		
-def nothing(*args, **kwargs):
-	pass
 
 def make_shot(firing_obj, direction):
 		shotx, shoty = firing_obj.rect.center
@@ -689,8 +703,6 @@ def make_shot(firing_obj, direction):
 		#allqueue.add(shot)
 		for queue in firing_obj.groups():
 			queue.add(shot)
-
-#ShotsFiredEvent = Msg(make_shot)
 
 class GameHandler(object):
 
@@ -754,7 +766,7 @@ class GameHandler(object):
 		difficulty, stage = divmod(levelCounter, 4)
 		Level = GameLoop(difficulty, stage)
 		while gameOn:
-			print eventhandler._handler
+			#print eventhandler._handler
 			eventhandler._handler._cleanse()
 			nextLevel = Level.play(difficulty, stage)
 			if nextLevel: 
@@ -905,12 +917,7 @@ class GameLoop(object):
 		go_to_gameover = FPS * 3
 		running = True
 		paused = False
-		#scoreNumText.change_with(ship, ship.change_score)
-		#Score_Changed = Msg(ship.change_score, scoreNumText.set_text_as_int)
-		#newScore = Msg(scoreNumText.set_text)
 		scoreNumText.sub('newScore', scoreNumText.set_text)
-		#updateAllScores = Msg(scoreNumText.set_text, ship.set_score)
-		#updateLives = Msg(livesNumText.set_text)
 		while running:
 			DISPLAYSURF.fill(BLACK)
 			STARFIELDBG.update()
