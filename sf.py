@@ -321,9 +321,11 @@ class Player(ListenSprite):
 			halfh = self.drawImg.get_rect().height / 2
 			for index, piece in enumerate([(x, y) for x in (0, halfw) for y in (0, halfh)]):
 				BustedRect = pygame.Rect(piece[0], piece[1], halfw, halfh)
-				BustedPiece = ShipPiece(imgX, imgY, self.drawImg.subsurface(BustedRect), ['upleft', 'downleft', 'upright', 'downright'][index])
-				allqueue.add(BustedPiece)
-				
+				BustedPiece = ShipPiece(imgX if piece[0] == 0 else imgX + halfw, 
+										imgY if piece[1] == 0 else imgY + halfh, 
+										self.drawImg.subsurface(BustedRect), 
+										['upleft', 'downleft', 'upright', 'downright'][index])
+				allqueue.add(BustedPiece)	
 		if not self.lives:
 			self.kill()
 			
