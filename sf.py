@@ -9,12 +9,11 @@
 
 import pygame
 import random
-import os
 import sys
-import time
 import spritesheet
 import math
 from stickavent.listenobj import ListenObj, eventhandler
+from os import path
 try:
 	import cPickle as pickle
 except:
@@ -72,18 +71,18 @@ rotate_img = pygame.transform.rotate
 
 def load_sound(pathToSound, fileName):
 	"""Loads a sound file from a path relative to the main module's location."""
-	return pygame.mixer.Sound(os.path.join(pathToSound, fileName))
+	return pygame.mixer.Sound(path.join(pathToSound, fileName))
 	
 def coinflip():
 	"""Randomly returns either True or False."""
 	return random.choice((True, False))
 
-def is_out_of_bounds(objRect, offset=15):
+def is_out_of_bounds(objXY, offset=15):
 	"""Used to see if an object has gone too far
 	off the screen. Can be optionally passed an 'offset' to alter just how 
 	far off the screen an object can live.
 	"""
-	objX, objY = objRect
+	objX, objY = objXY
 	if objX < offset * -1 or objX > SCREENWIDTH + offset or objY < offset * -1 or objY > SCREENHEIGHT + offset:
 		return True
 	else:
@@ -165,23 +164,29 @@ class TextObj(ListenSprite):
 		self.text = str(text)
 		self.color = color
 		self.font = font
-		self.rect = self.font.render(self.text, True, self.color).get_rect(topleft=(self.x, self.y))
+		self.find_to_blit()
+		self.find_rect()
 	
 	def set_text(self, text):
 		self.text = str(text)
-		self.rect = self.font.render(self.text, True, self.color).get_rect(topleft=(self.x, self.y))
+		self.find_to_blit()
+		self.find_rect()
 		
 	def set_ctr(self, newX, newY):
 		self.rect.center = newX, newY
 		self.x, self.y = self.rect.topleft
+		
+	def find_to_blit(self):
+		self.to_blit = self.font.render(self.text, True, self.color)
+		
+	def find_rect(self):
+		self.rect = self.to_blit.get_rect(topleft=(self.x, self.y))
 	
 	def update(self):
 		pass 
 	
 	def draw(self):
-		to_blit = self.font.render(self.text, True, self.color)
-		self.rect = to_blit.get_rect(topleft=(self.x, self.y))
-		DISPLAYSURF.blit(to_blit, self.rect)
+		DISPLAYSURF.blit(self.to_blit, self.rect)
 		
 def rising_points(obj, func):
 	def inner(*args, **kwargs):
@@ -446,9 +451,8 @@ class Enemy(ListenSprite):
 			self.x += speedConstant
 		
 	def find_rect(self):
-		newRect = self.drawImg.get_bounding_rect()
-		newRect.topleft = self.x, self.y
-		self.rect = newRect
+		self.rect = self.drawImg.get_bounding_rect()
+		self.rect.topleft = self.x, self.y
 		
 	def draw(self):
 		turn = self.direction if self.direction is not '' else 'up'
@@ -764,7 +768,7 @@ class GameHandler(object):
 		difficulty, stage = divmod(levelCounter, 4)
 		Level = GameLoop(difficulty, stage)
 		while gameOn:
-			#print eventhandler._handler
+			###THIS NEEDS TO GO AWAY###
 			eventhandler._handler._cleanse()
 			nextLevel = Level.play(difficulty, stage)
 			if nextLevel: 
@@ -790,7 +794,7 @@ class GameHandler(object):
 		if ship.score > scoreList[-1][1]:	#if ship.score is high enough, collectScore is set to True
 			collectScore = True
 		displayScores = True
-		pygame.mixer.music.load(os.path.join('sounds', 'gameover.wav'))
+		pygame.mixer.music.load(path.join('sounds', 'gameover.wav'))
 		pygame.mixer.music.play(-1)
 		while displayScores:
 			DISPLAYSURF.fill(BLACK)
