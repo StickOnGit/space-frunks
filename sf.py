@@ -286,8 +286,8 @@ class Player(ListenSprite):
 		xDirect = 1 if mouseX >= shipX else -1
 		yDirect = 1 if mouseY >= shipY else -1
 		if deltaX >= 1 and deltaY >= 1:
-			xDirect /= 1.4
-			yDirect /= 1.4
+			xDirect /= 1.3
+			yDirect /= 1.3
 		if deltaX < self.speed:
 			moveToX = mouseX
 		else:
@@ -320,17 +320,18 @@ class Player(ListenSprite):
 			self.respawn = FPS * 2
 			self.cooldown = FPS * 2
 			self.lives -= 1
-			playerDeadSound.play()
 			imgX, imgY = self.rect.topleft
-			halfw = self.drawImg.get_rect().width / 2
-			halfh = self.drawImg.get_rect().height / 2
+			img_rect = self.drawImg.get_rect()
+			halfw = img_rect.width / 2
+			halfh = img_rect.height / 2
 			for index, piece in enumerate([(x, y) for x in (0, halfw) for y in (0, halfh)]):
 				BustedRect = pygame.Rect(piece[0], piece[1], halfw, halfh)
 				BustedPiece = ShipPiece(imgX if piece[0] == 0 else imgX + halfw, 
 										imgY if piece[1] == 0 else imgY + halfh, 
 										self.drawImg.subsurface(BustedRect), 
 										['upleft', 'downleft', 'upright', 'downright'][index])
-				allqueue.add(BustedPiece)	
+				allqueue.add(BustedPiece)
+			playerDeadSound.play()
 		if not self.lives:
 			self.kill()
 			
