@@ -69,9 +69,11 @@ except:
 
 rotate_img = pygame.transform.rotate
 
-def load_sound(pathToSound, fileName):
+def load_sound(pathToSound, fileName, volume=0.25):
 	"""Loads a sound file from a path relative to the main module's location."""
-	return pygame.mixer.Sound(path.join(pathToSound, fileName))
+	newsound = pygame.mixer.Sound(path.join(pathToSound, fileName))
+	newsound.set_volume(volume)
+	return newsound
 	
 def coinflip():
 	"""Randomly returns either True or False."""
@@ -82,11 +84,12 @@ def is_out_of_bounds(objXY, offset=15):
 	off the screen. Can be optionally passed an 'offset' to alter just how 
 	far off the screen an object can live.
 	"""
-	objX, objY = objXY
-	if objX < offset * -1 or objX > SCREENWIDTH + offset or objY < offset * -1 or objY > SCREENHEIGHT + offset:
-		return True
-	else:
-		return False
+	#objX, objY = objXY
+	#if objX < offset * -1 or objX > SCREENWIDTH + offset or objY < offset * -1 or objY > SCREENHEIGHT + offset:
+	#	return True
+	#else:
+	#	return False
+	return not (SCREENWIDTH + offset > objXY[0] > offset * -1 or SCREENHEIGHT + offset > objXY[1] > offset * -1)
 
 #loads sounds(but not music... it's handled differently)
 enemyDeadSound = load_sound('sounds', 'enemydead.wav')
@@ -111,17 +114,49 @@ BOOMFOR = ALLSHEET.image_at((96, 96, 32, 32), -1)
 BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR]
 
 class ListenSprite(pygame.sprite.Sprite, ListenObj):
-	def __init__(self):
+	def __init__(self, x=1, y=1):
 		pygame.sprite.Sprite.__init__(self)
 		ListenObj.__init__(self)
+		self.rect = pygame.Rect(x,y,1,1)
+		self.x = x
+		self.y = x
+		self.direction = ''
+		self.speed = 0
+		
+	def __setattr__(self, k, v):
+		super(ListenSprite, self).__setattr__(k, v)
+		if k == 'x':
+			self.rect.x = v
+		if k == 'y':
+			self.rect.y = v
+	
+	def move(self):
+		"""Calculates the new position for the object.
+		Uses strings to determine which direction to move in, 
+		and a speedConstant to determine how many pixels in that direction to move.
+		A 'diagonal string' ('upleft', 'downright', etc) will cause it to divide 
+		speedConstant by 1.4, because Pythagorus and whatnot.
+		"""
+		speedConstant = self.speed
+		if len(self.direction) > 5:
+			speedConstant /= 1.4
+		if 'up' in self.direction:
+			self.y -= speedConstant
+		if 'down' in self.direction:
+			self.y += speedConstant
+		if 'left' in self.direction:
+			self.x -= speedConstant
+		if 'right' in self.direction:
+			self.x += speedConstant
 		
 	def kill(self):
 		self.unsub_all()
 		super(ListenSprite, self).kill()
 
-class Explosion(pygame.sprite.Sprite):
+class Explosion(ListenSprite):
 	def __init__(self, x, y):
-		pygame.sprite.Sprite.__init__(self)
+		#pygame.sprite.Sprite.__init__(self)
+		super(Explosion, self).__init__(x, y)
 		self.x = x
 		self.y = y
 		self.imgs = BOOMLIST
@@ -136,17 +171,13 @@ class Explosion(pygame.sprite.Sprite):
 		imgindex = self.counter / 3
 		if imgindex < self.allimgs:
 			self.drawImg = self.imgs[imgindex]
-			self.find_rect()
 		else:
 			self.kill()
 			
 	def draw(self):
 		shownImg = rotate_img(self.drawImg, self.spin)
-		drawCtr = shownImg.get_rect(center=self.rect.center)
-		DISPLAYSURF.blit(shownImg, drawCtr)
+		DISPLAYSURF.blit(shownImg, self.rect)
 		
-	def find_rect(self):
-		self.rect.topleft = self.x, self.y
 		
 def make_explosion(obj, func):
 	def inner(*args, **kwargs):
@@ -156,7 +187,7 @@ def make_explosion(obj, func):
 	
 class TextObj(ListenSprite):
 	def __init__(self, x=0, y=0, text='_default_', color=RED, font=GAMEFONT):
-		super(TextObj, self).__init__()
+		super(TextObj, self).__init__(x, y)
 		self.x = x
 		self.y = y
 		self.speed = 1
@@ -202,13 +233,11 @@ def rising_points(obj, func):
 
 class Player(ListenSprite):
 	def __init__(self, x, y):
-		super(Player, self).__init__()
-		self.x = x
-		self.y = y
+		super(Player, self).__init__(x, y)
 		self.img = PLAYERSHIPIMG
 		self.drawImg = self.img
 		self.speed = 4
-		self.rect = self.img.get_rect(center=(self.x, self.y))
+		self.rect = self.img.get_rect(topleft=(self.x, self.y))
 		self.cooldown = 0
 		self.respawn = 0
 		self.lives = 3
@@ -220,7 +249,7 @@ class Player(ListenSprite):
 		Message is 'new' + the attribute changed; 'newScore' or 'newLives', etc.
 		"""
 		super(Player, self).__setattr__(k, v)
-		if k in ['lives', 'score']:
+		if k in ('lives', 'score'):
 			self.pub("new{}".format(k.capitalize()), v)
 		
 	def ready_new_game(self):
@@ -298,19 +327,20 @@ class Player(ListenSprite):
 			moveToY = shipY + (self.speed * yDirect)
 		self.rect = self.drawImg.get_bounding_rect()
 		self.rect.center = moveToX, moveToY
+		self.x, self.y = self.rect.topleft
 		self.cooldown -= 1 if self.cooldown > 0 else 0
 		self.respawn -= 1 if self.respawn > 0 else 0
 		if self.score >= (EARNEDEXTRAGUY * self.extraGuyCounter):	#grants an extra life every X points
 			self.lives += 1
 			self.extraGuyCounter += 1
+		#print self.x, self.y
 
 	def draw(self):
 		"""Hook for the controller's draw() call.
 		If not respawning, draw. If half-way done respawning, flicker.
 		"""
 		if not self.respawn or (self.respawn <= FPS and (self.respawn % 3 == 1)):
-			drawCtr = self.drawImg.get_rect(center=self.rect.center)
-			DISPLAYSURF.blit(self.drawImg, drawCtr)
+			DISPLAYSURF.blit(self.drawImg, self.drawImg.get_rect(center=self.rect.center))
 
 	def got_hit(self):
 		"""Hook for controller's got_hit() call. 
@@ -320,14 +350,14 @@ class Player(ListenSprite):
 			self.respawn = FPS * 2
 			self.cooldown = FPS * 2
 			self.lives -= 1
-			imgX, imgY = self.rect.topleft
+			#imgX, imgY = self.rect.topleft
 			img_rect = self.drawImg.get_rect()
 			halfw = img_rect.width / 2
 			halfh = img_rect.height / 2
 			for index, piece in enumerate([(x, y) for x in (0, halfw) for y in (0, halfh)]):
 				BustedRect = pygame.Rect(piece[0], piece[1], halfw, halfh)
-				BustedPiece = ShipPiece(imgX if piece[0] == 0 else imgX + halfw, 
-										imgY if piece[1] == 0 else imgY + halfh, 
+				BustedPiece = ShipPiece(self.x if piece[0] == 0 else self.x + halfw, 
+										self.y if piece[1] == 0 else self.y + halfh, 
 										self.drawImg.subsurface(BustedRect), 
 										['upleft', 'downleft', 'upright', 'downright'][index])
 				allqueue.add(BustedPiece)
@@ -337,7 +367,7 @@ class Player(ListenSprite):
 			
 class ShipPiece(ListenSprite):
 	def __init__(self, x, y, img_piece, direction):
-		super(ShipPiece, self).__init__()
+		super(ShipPiece, self).__init__(x, y)
 		self.x = x
 		self.y = y
 		self.img_piece = img_piece
@@ -352,42 +382,16 @@ class ShipPiece(ListenSprite):
 			self.kill()
 		else:
 			self.move()
-			self.find_rect()
 			self.draw()
-		
-	def move(self):
-		"""Calculates the new position for the object.
-		Uses strings to determine which direction to move in, 
-		and a speedConstant to determine how many pixels in that direction to move.
-		A 'diagonal string' ('upleft', 'downright', etc) will cause it to divide 
-		speedConstant by 1.4, because Pythagorus and whatnot.
-		"""
-		speedConstant = self.speed
-		if len(self.direction) > 5:
-			speedConstant /= 1.4
-		if 'up' in self.direction:
-			self.y -= speedConstant
-		if 'down' in self.direction:
-			self.y += speedConstant
-		if 'left' in self.direction:
-			self.x -= speedConstant
-		if 'right' in self.direction:
-			self.x += speedConstant
-		
-	def find_rect(self):
-		newRect = self.img_piece.get_bounding_rect()
-		newRect.topleft = self.x, self.y
-		self.rect = newRect
 		
 	def draw(self):
 		if self.counter % 3 == 1:
-			drawCtr = self.img_piece.get_rect(center=self.rect.center)
-			DISPLAYSURF.blit(self.img_piece, drawCtr)
+			DISPLAYSURF.blit(self.img_piece, self.rect)
 
 
 class Enemy(ListenSprite):
 	def __init__(self, x, y, dirs=FOURDIRS):
-		super(Enemy, self).__init__()
+		super(Enemy, self).__init__(x, y)
 		self.x = x
 		self.y = y
 		self.img = ALLSHEET.image_at((32, 32, 32, 32), -1)
@@ -404,13 +408,12 @@ class Enemy(ListenSprite):
 
 	def update(self):
 		"""Calls all the methods!
-		Try not to replace .move() or .find_rect().
+		Try not to replace .move().
 		The rest can be replace on-the-fly to act as new AI.
 		"""
 		self.unique_action()
 		self.shot_check()
 		self.move()
-		self.find_rect()
 	
 	def unique_action(self):
 		"""A hook for new movements. 
@@ -431,29 +434,6 @@ class Enemy(ListenSprite):
 			self.direction = newDirection
 		else:
 			self.counter += self.speed
-
-	def move(self):
-		"""Calculates the new position for the object.
-		Uses strings to determine which direction to move in, 
-		and a speedConstant to determine how many pixels in that direction to move.
-		A 'diagonal string' ('upleft', 'downright', etc) will cause it to divide 
-		speedConstant by 1.4, because Pythagorus and whatnot.
-		"""
-		speedConstant = self.speed
-		if len(self.direction) > 5:
-			speedConstant /= 1.4
-		if 'up' in self.direction:
-			self.y -= speedConstant
-		if 'down' in self.direction:
-			self.y += speedConstant
-		if 'left' in self.direction:
-			self.x -= speedConstant
-		if 'right' in self.direction:
-			self.x += speedConstant
-		
-	def find_rect(self):
-		self.rect = self.drawImg.get_bounding_rect()
-		self.rect.topleft = self.x, self.y
 		
 	def draw(self):
 		turn = self.direction if self.direction is not '' else 'up'
@@ -488,10 +468,10 @@ class Enemy(ListenSprite):
 		self.cooldown = FPS / 2
 		enemyShotSound.play()
 
-class Bullet(pygame.sprite.Sprite):
+class Bullet(ListenSprite):
 	"""Bullet object. When it hits things, they blows up."""
 	def __init__(self, x, y, direction):
-		pygame.sprite.Sprite.__init__(self)
+		super(Bullet, self).__init__(x, y)
 		self.x = x
 		self.y = y
 		self.direction = direction
@@ -516,13 +496,9 @@ class Bullet(pygame.sprite.Sprite):
 			self.x -= speedConstant
 		if 'right' in self.direction:
 			self.x += speedConstant
-		self.find_rect()
 		self.counter += self.speed
 		if is_out_of_bounds(self.rect.center, offset=50) or self.counter >= self.range:
 			self.kill()
-
-	def find_rect(self):
-		self.rect.topleft = self.x, self.y
 	
 	def draw(self):
 		pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 2)
