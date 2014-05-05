@@ -79,17 +79,14 @@ def coinflip():
 	"""Randomly returns either True or False."""
 	return random.choice((True, False))
 
-def is_out_of_bounds(objXY, offset=15):
+def is_out_of_bounds(objXY, offset=15, w=SCREENWIDTH, h=SCREENHEIGHT):
 	"""Used to see if an object has gone too far
 	off the screen. Can be optionally passed an 'offset' to alter just how 
 	far off the screen an object can live.
 	"""
-	#objX, objY = objXY
-	#if objX < offset * -1 or objX > SCREENWIDTH + offset or objY < offset * -1 or objY > SCREENHEIGHT + offset:
-	#	return True
-	#else:
-	#	return False
-	return not (SCREENWIDTH + offset > objXY[0] > offset * -1 or SCREENHEIGHT + offset > objXY[1] > offset * -1)
+	if (w + offset) > objXY[0] > (offset * -1) and (h + offset) > objXY[1] > (offset * -1):
+		return False
+	else: return True
 
 #loads sounds(but not music... it's handled differently)
 enemyDeadSound = load_sound('sounds', 'enemydead.wav')
@@ -104,8 +101,8 @@ PLAYERSHIPIMG = ALLSHEET.image_at((0, 0, 32, 32), -1)
 PLAYERSHIPFIRE = ALLSHEET.image_at((32, 0, 32, 32), -1)
 REDSHIPIMG = ALLSHEET.image_at((0, 32, 32, 32), -1)
 GREENSHIPIMG = ALLSHEET.image_at((0, 64, 32, 32), -1)
-GOODGUYSHOT = ALLSHEET.image_at((0, 96, 32, 32), -1)
-BADGUYSHOT = ALLSHEET.image_at((32, 96, 32, 32), -1)
+GOODGUYSHOT = ALLSHEET.image_at((64, 0, 32, 32), -1)
+BADGUYSHOT = ALLSHEET.image_at((64, 32, 32, 32), -1)
 ##explosion
 BOOMONE = ALLSHEET.image_at((0, 96, 32, 32), -1)
 BOOMTWO = ALLSHEET.image_at((32, 96, 32, 32), -1)
@@ -119,7 +116,7 @@ class ListenSprite(pygame.sprite.Sprite, ListenObj):
 		ListenObj.__init__(self)
 		self.rect = pygame.Rect(x,y,1,1)
 		self.x = x
-		self.y = x
+		self.y = y
 		self.direction = ''
 		self.speed = 0
 		
@@ -148,6 +145,11 @@ class ListenSprite(pygame.sprite.Sprite, ListenObj):
 			self.x -= speedConstant
 		if 'right' in self.direction:
 			self.x += speedConstant
+			
+	def resize_rect(self):
+		new_rect = self.drawImg.get_bounding_rect()
+		new_rect.center = self.rect.center
+		self.rect = new_rect
 		
 	def kill(self):
 		self.unsub_all()
@@ -171,12 +173,13 @@ class Explosion(ListenSprite):
 		imgindex = self.counter / 3
 		if imgindex < self.allimgs:
 			self.drawImg = self.imgs[imgindex]
+			self.resize_rect()
 		else:
 			self.kill()
 			
 	def draw(self):
 		shownImg = rotate_img(self.drawImg, self.spin)
-		DISPLAYSURF.blit(shownImg, self.rect)
+		DISPLAYSURF.blit(shownImg, shownImg.get_rect(center=self.rect.center))
 		
 		
 def make_explosion(obj, func):
@@ -188,9 +191,6 @@ def make_explosion(obj, func):
 class TextObj(ListenSprite):
 	def __init__(self, x=0, y=0, text='_default_', color=RED, font=GAMEFONT):
 		super(TextObj, self).__init__(x, y)
-		self.x = x
-		self.y = y
-		self.speed = 1
 		self.counter = FPS
 		self.text = str(text)
 		self.color = color
@@ -211,11 +211,8 @@ class TextObj(ListenSprite):
 		self.to_blit = self.font.render(self.text, True, self.color)
 		
 	def find_rect(self):
-		self.rect = self.to_blit.get_rect(topleft=(self.x, self.y))
-	
-	def update(self):
-		pass 
-	
+		self.rect = self.to_blit.get_rect(topleft=(self.x, self.y)) 
+
 	def draw(self):
 		DISPLAYSURF.blit(self.to_blit, self.rect)
 		
@@ -228,6 +225,7 @@ def rising_points(obj, func):
 		else:
 			obj.rect.topleft = obj.x, obj.y
 		return func(*args, **kwargs)
+	obj.speed = 1
 	return inner
 		
 
@@ -250,7 +248,7 @@ class Player(ListenSprite):
 		"""
 		super(Player, self).__setattr__(k, v)
 		if k in ('lives', 'score'):
-			self.pub("new{}".format(k.capitalize()), v)
+			self.pub("on_ship_{}".format(k), v)
 		
 	def ready_new_game(self):
 		"""Gets the ship ready for a new game.
@@ -333,7 +331,6 @@ class Player(ListenSprite):
 		if self.score >= (EARNEDEXTRAGUY * self.extraGuyCounter):	#grants an extra life every X points
 			self.lives += 1
 			self.extraGuyCounter += 1
-		#print self.x, self.y
 
 	def draw(self):
 		"""Hook for the controller's draw() call.
@@ -414,6 +411,7 @@ class Enemy(ListenSprite):
 		self.unique_action()
 		self.shot_check()
 		self.move()
+		self.resize_rect()
 	
 	def unique_action(self):
 		"""A hook for new movements. 
@@ -422,22 +420,27 @@ class Enemy(ListenSprite):
 		"""
 		if self.counter >= self.range or is_out_of_bounds(self.rect.center):
 			self.counter = 0
-			newDirection = ''
-			if 'up' in self.direction:
-				newDirection += 'down'
-			if 'down' in self.direction:
-				newDirection += 'up'
-			if 'left' in self.direction:
-				newDirection += 'right'
-			if 'right' in self.direction:
-				newDirection += 'left'
-			self.direction = newDirection
+			self.bounce()
 		else:
 			self.counter += self.speed
+			
+	def bounce(self):
+		"""Lets the object bounce off the window walls.
+		Reverses its direction by changing the direction string.
+		"""
+		newDirection = ''
+		if 'up' in self.direction:
+			newDirection += 'down'
+		if 'down' in self.direction:
+			newDirection += 'up'
+		if 'left' in self.direction:
+			newDirection += 'right'
+		if 'right' in self.direction:
+			newDirection += 'left'
+		self.direction = newDirection
 		
 	def draw(self):
-		turn = self.direction if self.direction is not '' else 'up'
-		self.drawImg = rotate_img(self.img, SPINNER.get(turn, 0))
+		self.drawImg = rotate_img(self.img, SPINNER.get(self.direction, 0))
 		drawCtr = self.drawImg.get_rect(center=self.rect.center)
 		DISPLAYSURF.blit(self.drawImg, drawCtr)
 
@@ -449,9 +452,8 @@ class Enemy(ListenSprite):
 		self.kill()
 
 	def shot_check(self):
-		"""Determines when and if the object can attempt to fire.
-		Once obj.cooldown reaches 0, gets a random number between 1 and obj.shotrate.
-		If that number is equal to obj.shotrate, it fires.
+		"""Determines if and when the object can attempt to fire.
+		If the cooldown is 0 and it rolls a random number >= obj.shotrate, it fires.
 		"""
 		self.cooldown -= 1
 		if self.cooldown <= 0 and random.randint(1, self.shotrate) >= self.shotrate:
@@ -463,6 +465,7 @@ class Enemy(ListenSprite):
 		badShot = Bullet(shotx, shoty, random.choice(EIGHTDIRS))
 		badShot.speed = 4
 		badShot.color = LIGHTRED
+		badShot.drawImg = BADGUYSHOT
 		badqueue.add(badShot)
 		allqueue.add(badShot)
 		self.cooldown = FPS / 2
@@ -479,31 +482,37 @@ class Bullet(ListenSprite):
 		self.counter = 0
 		self.width = 4
 		self.height = 4
-		self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
+		self.drawImg = GOODGUYSHOT
+		#self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
+		self.rect = self.drawImg.get_rect(center=(x, y))
+		self.resize_rect()
 		self.speed = 10
 		self.color = GREEN
 		self.points = 0
 
 	def update(self):
-		speedConstant = self.speed
-		if len(self.direction) > 5:
-			speedConstant /= 1.4
-		if 'up' in self.direction:
-			self.y -= speedConstant
-		if 'down' in self.direction:
-			self.y += speedConstant
-		if 'left' in self.direction:
-			self.x -= speedConstant
-		if 'right' in self.direction:
-			self.x += speedConstant
+		#speedConstant = self.speed
+		#if len(self.direction) > 5:
+		#	speedConstant /= 1.4
+		#if 'up' in self.direction:
+		#	self.y -= speedConstant
+		#if 'down' in self.direction:
+		#	self.y += speedConstant
+		#if 'left' in self.direction:
+		#	self.x -= speedConstant
+		#if 'right' in self.direction:
+		#	self.x += speedConstant
+		self.move()
+		self.resize_rect()
 		self.counter += self.speed
 		if is_out_of_bounds(self.rect.center, offset=50) or self.counter >= self.range:
 			self.kill()
 	
 	def draw(self):
-		pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 2)
-		#drawCtr = self.drawImg.get_rect(center=self.rect.center)		##need different sprite
-		#DISPLAYSURF.blit(self.drawImg, drawCtr)						##current badguy sprite is transparent
+		#pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 2)
+		drawCtr = self.drawImg.get_rect(center=self.rect.center)		##need different sprite
+		DISPLAYSURF.blit(self.drawImg, drawCtr)						##current badguy sprite is transparent
+		#pygame.draw.rect(DISPLAYSURF, (self.color), (self.rect), 2)
 
 	def got_hit(self):
 		self.kill()
@@ -564,7 +573,7 @@ class Starfield(object):
 STARFIELDBG = Starfield()
 
 #alternative patterns of movement for Enemy() added via strategy patterns, thanks AC
-def sweep_strategy(obj):
+def sweep_strategy(obj, func):
 	def inner(*args, **kwargs):
 		if obj.x > SCREENWIDTH + 30:
 			obj.y = random.randrange(25, (SCREENHEIGHT - 25))
@@ -580,7 +589,7 @@ def sweep_strategy(obj):
 			obj.y = SCREENHEIGHT + 20
 	return inner
 	
-def rammer_strategy(obj):
+def rammer_strategy(obj, func):
 	"""Compares its x and y coordinates against the target and moves toward it.
 	If the ship is respawning, the target is its own x and y of origin. 
 	If the ship is NOT respawning, the ship is of course the target.
@@ -610,7 +619,7 @@ def rammer_strategy(obj):
 	obj.points = 300
 	return inner
 		
-def teleport_strategy(obj):
+def teleport_strategy(obj, func):
 	"""This replaces unique_action.
 	When enemy.counter reaches 0 (or less), a new position 
 	and direction for enemy is chosen and the counter is reset 
@@ -629,6 +638,8 @@ def teleport_strategy(obj):
 			obj.direction = random.choice(FOURDIRS)
 			obj.counter = FPS * 3
 			teleportSound.play()
+		if is_out_of_bounds(obj.rect.center):
+			obj.bounce()
 	obj.img = GREENSHIPIMG
 	obj.points = 200
 	obj.speed -= 1
@@ -859,7 +870,7 @@ class GameLoop(object):
 			newAI = random.choice((kindsOfAI))
 			#newAI = a_thing_to_test
 			if newAI:
-				enemy.unique_action = newAI(enemy)
+				enemy.unique_action = newAI(enemy, enemy.unique_action)
 			enemy.kill = make_explosion(enemy, enemy.kill)
 			for tick in xrange(0, difficulty):
 				if coinflip():
@@ -883,7 +894,7 @@ class GameLoop(object):
 		livesText.x, livesText.y = livesText.rect.topleft
 		livesNumText = TextObj(livesText.rect.topright[0] + 5, 
 								livesText.rect.topright[1], ship.lives, WHITE, statsFont)
-		livesNumText.sub('newLives', livesNumText.set_text)
+		livesNumText.sub('on_ship_lives', livesNumText.set_text)
 								
 		levelText = TextObj(text='Level %d - %d' % (difficulty + 1, stage + 1), color=WHITE, font=statsFont)
 		levelText.set_ctr((SCREENWIDTH / 2), (SCREENHEIGHT / 20))
@@ -896,7 +907,7 @@ class GameLoop(object):
 		go_to_gameover = FPS * 3
 		running = True
 		paused = False
-		scoreNumText.sub('newScore', scoreNumText.set_text)
+		scoreNumText.sub('on_ship_score', scoreNumText.set_text)
 		while running:
 			DISPLAYSURF.fill(BLACK)
 			STARFIELDBG.update()
@@ -928,6 +939,7 @@ class GameLoop(object):
 				
 			for thing in self.allqueue:
 				thing.draw()
+				#pygame.draw.rect(DISPLAYSURF, WHITE, thing.rect, 1)
 			for thing in self.textqueue:
 				thing.draw()
 			if ship.lives > 0 and not ship.respawn:
