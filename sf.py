@@ -157,10 +157,9 @@ class ListenSprite(pygame.sprite.Sprite, ListenObj):
 
 class Explosion(ListenSprite):
 	def __init__(self, x, y):
-		#pygame.sprite.Sprite.__init__(self)
 		super(Explosion, self).__init__(x, y)
-		self.x = x
-		self.y = y
+		#self.x = x
+		#self.y = y
 		self.imgs = BOOMLIST
 		self.counter = 0
 		self.allimgs = len(self.imgs)
