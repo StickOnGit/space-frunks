@@ -5,7 +5,7 @@
 ##	Spritesheet contributed by Sam Sticka
 ##	8-bit sounds from... a website. I forget where, but they aren't original
 ##
-#################################################################################
+###############################################################################
 
 import pygame
 import random
@@ -53,7 +53,7 @@ DISPLAYSURF = pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
 pygame.display.set_caption('Space Frunks')
 pygame.mouse.set_visible(0)
 
-try:	#tries to load hiscores. if *any* exception, creates a default hiscore list
+try:	#either load hi-score list, or create a default list
 	f = open('scores.py', 'r')
 	rawScoreList = f.read()
 	scoreList = pickle.loads(rawScoreList)
@@ -70,7 +70,7 @@ except:
 rotate_img = pygame.transform.rotate
 
 def load_sound(pathToSound, fileName, volume=0.25):
-	"""Loads a sound file from a path relative to the main module's location."""
+	"""Loads sound file from relative path."""
 	newsound = pygame.mixer.Sound(path.join(pathToSound, fileName))
 	newsound.set_volume(volume)
 	return newsound
@@ -147,6 +147,10 @@ class ListenSprite(pygame.sprite.Sprite, ListenObj):
 			self.x += speedConstant
 			
 	def resize_rect(self):
+		"""Gets the current drawn image's bounding rect,
+		centers it on the current rect, and then replaces
+		the current rect.
+		"""
 		new_rect = self.drawImg.get_bounding_rect()
 		new_rect.center = self.rect.center
 		self.rect = new_rect
@@ -158,8 +162,6 @@ class ListenSprite(pygame.sprite.Sprite, ListenObj):
 class Explosion(ListenSprite):
 	def __init__(self, x, y):
 		super(Explosion, self).__init__(x, y)
-		#self.x = x
-		#self.y = y
 		self.imgs = BOOMLIST
 		self.counter = 0
 		self.allimgs = len(self.imgs)
@@ -296,35 +298,25 @@ class Player(ListenSprite):
 		Finally, counts down weapon cooldown, respawn (if needed), 
 		and checks to see if its point total grants it an extra life.
 		"""
-		drawDir = ''
+		newDir = ''
 		mouseX, mouseY = pygame.mouse.get_pos()
 		shipX, shipY = self.rect.center
 		if mouseY > shipY:
-			drawDir += 'down'
+			newDir += 'down'
 		if mouseY < shipY:
-			drawDir += 'up'
+			newDir += 'up'
 		if mouseX > shipX:
-			drawDir += 'right'
+			newDir += 'right'
 		if mouseX < shipX:
-			drawDir += 'left'
-		self.drawImg = rotate_img(self.img, SPINNER.get(drawDir, 0))
-		deltaX, deltaY = abs(shipX - mouseX), abs(shipY - mouseY)
-		xDirect = 1 if mouseX >= shipX else -1
-		yDirect = 1 if mouseY >= shipY else -1
-		if deltaX >= 1 and deltaY >= 1:
-			xDirect /= 1.3
-			yDirect /= 1.3
-		if deltaX < self.speed:
-			moveToX = mouseX
+			newDir += 'left'
+		if newDir:
+			self.direction = newDir
+		if math.hypot(abs(shipX - mouseX), abs(shipY - mouseY)) < self.speed:
+			self.rect.center = mouseX, mouseY
 		else:
-			moveToX = shipX + (self.speed * xDirect)
-		if deltaY < self.speed:
-			moveToY = mouseY
-		else:
-			moveToY = shipY + (self.speed * yDirect)
-		self.rect = self.drawImg.get_bounding_rect()
-		self.rect.center = moveToX, moveToY
-		self.x, self.y = self.rect.topleft
+			self.move()
+		self.resize_rect()
+		self.x, self.y = self.rect.x, self.rect.y
 		self.cooldown -= 1 if self.cooldown > 0 else 0
 		self.respawn -= 1 if self.respawn > 0 else 0
 		if self.score >= (EARNEDEXTRAGUY * self.extraGuyCounter):	#grants an extra life every X points
@@ -336,7 +328,8 @@ class Player(ListenSprite):
 		If not respawning, draw. If half-way done respawning, flicker.
 		"""
 		if not self.respawn or (self.respawn <= FPS and (self.respawn % 3 == 1)):
-			DISPLAYSURF.blit(self.drawImg, self.drawImg.get_rect(center=self.rect.center))
+			shownImg = rotate_img(self.drawImg, SPINNER.get(self.direction, 0))
+			DISPLAYSURF.blit(shownImg, shownImg.get_rect(center=self.rect.center))
 
 	def got_hit(self):
 		"""Hook for controller's got_hit() call. 
@@ -346,15 +339,15 @@ class Player(ListenSprite):
 			self.respawn = FPS * 2
 			self.cooldown = FPS * 2
 			self.lives -= 1
-			#imgX, imgY = self.rect.topleft
-			img_rect = self.drawImg.get_rect()
+			rotated_img = rotate_img(self.drawImg, SPINNER.get(self.direction, 0))
+			img_rect = rotated_img.get_rect()
 			halfw = img_rect.width / 2
 			halfh = img_rect.height / 2
 			for index, piece in enumerate([(x, y) for x in (0, halfw) for y in (0, halfh)]):
 				BustedRect = pygame.Rect(piece[0], piece[1], halfw, halfh)
 				BustedPiece = ShipPiece(self.x if piece[0] == 0 else self.x + halfw, 
-										self.y if piece[1] == 0 else self.y + halfh, 
-										self.drawImg.subsurface(BustedRect), 
+										self.y if piece[1] == 0 else self.y + halfh,
+										rotated_img.subsurface(BustedRect),
 										['upleft', 'downleft', 'upright', 'downright'][index])
 				allqueue.add(BustedPiece)
 			playerDeadSound.play()
@@ -388,8 +381,6 @@ class ShipPiece(ListenSprite):
 class Enemy(ListenSprite):
 	def __init__(self, x, y, dirs=FOURDIRS):
 		super(Enemy, self).__init__(x, y)
-		self.x = x
-		self.y = y
 		self.img = ALLSHEET.image_at((32, 32, 32, 32), -1)
 		self.drawImg = self.img
 		self.shotrate = 20
@@ -474,15 +465,14 @@ class Bullet(ListenSprite):
 	"""Bullet object. When it hits things, they blows up."""
 	def __init__(self, x, y, direction):
 		super(Bullet, self).__init__(x, y)
-		self.x = x
-		self.y = y
+		#self.x = x
+		#self.y = y
 		self.direction = direction
 		self.range = SCREENDIAG + 20
 		self.counter = 0
-		self.width = 4
-		self.height = 4
+		#self.width = 4
+		#self.height = 4
 		self.drawImg = GOODGUYSHOT
-		#self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
 		self.rect = self.drawImg.get_rect(center=(x, y))
 		self.resize_rect()
 		self.speed = 10
@@ -490,17 +480,6 @@ class Bullet(ListenSprite):
 		self.points = 0
 
 	def update(self):
-		#speedConstant = self.speed
-		#if len(self.direction) > 5:
-		#	speedConstant /= 1.4
-		#if 'up' in self.direction:
-		#	self.y -= speedConstant
-		#if 'down' in self.direction:
-		#	self.y += speedConstant
-		#if 'left' in self.direction:
-		#	self.x -= speedConstant
-		#if 'right' in self.direction:
-		#	self.x += speedConstant
 		self.move()
 		self.resize_rect()
 		self.counter += self.speed
@@ -508,10 +487,8 @@ class Bullet(ListenSprite):
 			self.kill()
 	
 	def draw(self):
-		#pygame.draw.ellipse(DISPLAYSURF, (self.color), (self.rect), 2)
-		drawCtr = self.drawImg.get_rect(center=self.rect.center)		##need different sprite
-		DISPLAYSURF.blit(self.drawImg, drawCtr)						##current badguy sprite is transparent
-		#pygame.draw.rect(DISPLAYSURF, (self.color), (self.rect), 2)
+		drawCtr = self.drawImg.get_rect(center=self.rect.center)
+		DISPLAYSURF.blit(self.drawImg, drawCtr)
 
 	def got_hit(self):
 		self.kill()
