@@ -13,6 +13,7 @@ import sys
 import spritesheet
 import math
 from stickavent.listenobj import ListenObj, eventhandler
+from tenfwd import add_observer, rm_observer, rm_from_all, msg, notify
 from os import path
 try:
 	import cPickle as pickle
@@ -119,6 +120,21 @@ class ListenSprite(pygame.sprite.Sprite, ListenObj):
 		self.y = y
 		self.direction = ''
 		self.speed = 0
+	#@property
+	#def x(self):
+	#	return self.rect.x
+	#
+	#@x.setter
+	#def x(self, value):
+	#	self.rect.topleft = (value, self.rect.topleft[1])
+	#	
+	#@property
+	#def y(self):
+	#	return self.rect.y
+	#
+	#@y.setter
+	#def y(self, value):
+	#	self.rect.topleft = (self.rect.topleft[0], value)
 		
 	def __setattr__(self, k, v):
 		super(ListenSprite, self).__setattr__(k, v)
@@ -157,6 +173,7 @@ class ListenSprite(pygame.sprite.Sprite, ListenObj):
 		
 	def kill(self):
 		self.unsub_all()
+		rm_from_all(self)
 		super(ListenSprite, self).kill()
 
 class Explosion(ListenSprite):
@@ -248,7 +265,8 @@ class Player(ListenSprite):
 		Message is 'new' + the attribute changed; 'newScore' or 'newLives', etc.
 		"""
 		super(Player, self).__setattr__(k, v)
-		if k in ('lives', 'score'):
+		#if k in ('lives', 'score'):
+		if k in ('lives'):
 			self.pub("on_ship_{}".format(k), v)
 		
 	def ready_new_game(self):
@@ -359,7 +377,7 @@ class ShipPiece(ListenSprite):
 		super(ShipPiece, self).__init__(x, y)
 		self.x = x
 		self.y = y
-		self.img_piece = img_piece
+		self.drawImg = img_piece
 		self.direction = direction
 		self.rect = img_piece.get_rect(topleft=(self.x, self.y))
 		self.speed = 1
@@ -371,11 +389,12 @@ class ShipPiece(ListenSprite):
 			self.kill()
 		else:
 			self.move()
+			self.resize_rect()
 			self.draw()
 		
 	def draw(self):
 		if self.counter % 3 == 1:
-			DISPLAYSURF.blit(self.img_piece, self.rect)
+			DISPLAYSURF.blit(self.drawImg, self.rect)
 
 
 class Enemy(ListenSprite):
@@ -871,6 +890,9 @@ class GameLoop(object):
 		livesNumText = TextObj(livesText.rect.topright[0] + 5, 
 								livesText.rect.topright[1], ship.lives, WHITE, statsFont)
 		livesNumText.sub('on_ship_lives', livesNumText.set_text)
+		##
+		##add_observer(livesNumText, '')
+		##
 								
 		levelText = TextObj(text='Level %d - %d' % (difficulty + 1, stage + 1), color=WHITE, font=statsFont)
 		levelText.set_ctr((SCREENWIDTH / 2), (SCREENHEIGHT / 20))
@@ -884,6 +906,9 @@ class GameLoop(object):
 		running = True
 		paused = False
 		scoreNumText.sub('on_ship_score', scoreNumText.set_text)
+		##
+		##add_observer(scoreNumText, '')
+		##
 		while running:
 			DISPLAYSURF.fill(BLACK)
 			STARFIELDBG.update()
@@ -911,6 +936,7 @@ class GameLoop(object):
 								pts.update = rising_points(pts, pts.update)
 								allqueue.add(pts)
 								ship.score += baddie.points
+								msg(scoreNumText, 'set_text', ship.score)
 					goodguy.got_hit()
 				
 			for thing in self.allqueue:
