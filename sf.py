@@ -12,8 +12,7 @@ import random
 import sys
 import spritesheet
 import math
-from stickavent.listenobj import ListenObj, eventhandler
-from tenfwd import add_observer, rm_observer, rm_from_all, msg, notify
+from tenfwd import add_observer, rm_observer, rm_from_all, msg, notify, publish
 from os import path
 try:
 	import cPickle as pickle
@@ -111,10 +110,9 @@ BOOMTHR = ALLSHEET.image_at((64, 96, 32, 32), -1)
 BOOMFOR = ALLSHEET.image_at((96, 96, 32, 32), -1)
 BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR]
 
-class ListenSprite(pygame.sprite.Sprite, ListenObj):
+class ListenSprite(pygame.sprite.Sprite):
 	def __init__(self, x=1, y=1):
-		pygame.sprite.Sprite.__init__(self)
-		ListenObj.__init__(self)
+		super(ListenSprite, self).__init__()
 		self.rect = pygame.Rect(x,y,1,1)
 		self.x = x
 		self.y = y
@@ -152,7 +150,7 @@ class ListenSprite(pygame.sprite.Sprite, ListenObj):
 		"""
 		speedConstant = self.speed
 		if len(self.direction) > 5:
-			speedConstant /= 1.4
+			speedConstant /= 1.414
 		if 'up' in self.direction:
 			self.y -= speedConstant
 		if 'down' in self.direction:
@@ -172,7 +170,6 @@ class ListenSprite(pygame.sprite.Sprite, ListenObj):
 		self.rect = new_rect
 		
 	def kill(self):
-		self.unsub_all()
 		rm_from_all(self)
 		super(ListenSprite, self).kill()
 
@@ -265,9 +262,8 @@ class Player(ListenSprite):
 		Message is 'new' + the attribute changed; 'newScore' or 'newLives', etc.
 		"""
 		super(Player, self).__setattr__(k, v)
-		#if k in ('lives', 'score'):
-		if k in ('lives'):
-			self.pub("on_ship_{}".format(k), v)
+		if k in ('score', 'lives'):
+			publish('ship_set_{}'.format(k), v)
 		
 	def ready_new_game(self):
 		"""Gets the ship ready for a new game.
@@ -752,7 +748,7 @@ class GameHandler(object):
 		Level = GameLoop(difficulty, stage)
 		while gameOn:
 			###THIS NEEDS TO GO AWAY###
-			eventhandler._handler._cleanse()
+			#eventhandler._handler._cleanse()
 			nextLevel = Level.play(difficulty, stage)
 			if nextLevel: 
 				levelCounter += 1	#use divmod() to determine next level's iteration and difficulty
@@ -889,10 +885,6 @@ class GameLoop(object):
 		livesText.x, livesText.y = livesText.rect.topleft
 		livesNumText = TextObj(livesText.rect.topright[0] + 5, 
 								livesText.rect.topright[1], ship.lives, WHITE, statsFont)
-		livesNumText.sub('on_ship_lives', livesNumText.set_text)
-		##
-		##add_observer(livesNumText, '')
-		##
 								
 		levelText = TextObj(text='Level %d - %d' % (difficulty + 1, stage + 1), color=WHITE, font=statsFont)
 		levelText.set_ctr((SCREENWIDTH / 2), (SCREENHEIGHT / 20))
@@ -905,10 +897,12 @@ class GameLoop(object):
 		go_to_gameover = FPS * 3
 		running = True
 		paused = False
-		scoreNumText.sub('on_ship_score', scoreNumText.set_text)
-		##
-		##add_observer(scoreNumText, '')
-		##
+		
+		scoreNumText.ship_set_score = scoreNumText.set_text
+		add_observer(scoreNumText, 'ship_set_score')
+		livesNumText.ship_set_lives = livesNumText.set_text
+		add_observer(livesNumText, 'ship_set_lives')
+		
 		while running:
 			DISPLAYSURF.fill(BLACK)
 			STARFIELDBG.update()
@@ -936,7 +930,6 @@ class GameLoop(object):
 								pts.update = rising_points(pts, pts.update)
 								allqueue.add(pts)
 								ship.score += baddie.points
-								msg(scoreNumText, 'set_text', ship.score)
 					goodguy.got_hit()
 				
 			for thing in self.allqueue:

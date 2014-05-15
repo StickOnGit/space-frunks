@@ -22,6 +22,12 @@ def notify(obj, message, *args, **kwargs):
 	_msg = tryer_msg
 	peeps = [obj] + [p for p in Obvs[message] if p is not obj] if message in Obvs else [obj]
 	[_msg(peep, message, *args, **kwargs) for peep in peeps]
+	
+def publish(message, *args, **kwargs):
+	"""Sends message to observers. No target."""
+	_msg = tryer_msg
+	#peeps = [p for p in Obvs[message]] if message in Obvs else []
+	[_msg(peep, message, *args, **kwargs) for peep in Obvs[message]] if message in Obvs else None
 
 
 ### bunches of methods to test out which version
