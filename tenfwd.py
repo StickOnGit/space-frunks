@@ -47,12 +47,11 @@ def try_msg(obj, message, *args, **kwargs):
 def tryer_msg(obj, message, *args, **kwargs):
 	try:
 		result = getattr(obj, message)
+		return result(*args, **kwargs)
 	except AttributeError:
 		raise AttributeError("Bad message '{}' sent to object '{}'".format(message, obj))
-	try:
-		return result(*args, **kwargs)
 	except TypeError:
-		if not args or kwargs:
+		if not (args or kwargs):
 			return result
 		else:
 			raise TypeError("Message '{}' sent to non-callable attribute of object'{}'".format(message, obj))
