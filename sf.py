@@ -164,17 +164,18 @@ class ListenSprite(pygame.sprite.Sprite):
 		centers it on the current rect, and then replaces
 		the current rect.
 		"""
-		new_rect = self.drawImg.get_bounding_rect()
+		#new_rect = self.drawImg.get_bounding_rect()
+		new_rect = self.get_turned_image().get_bounding_rect()
 		new_rect.center = self.rect.center
 		self.rect = new_rect
 
 	def get_turned_image(self):
-		spin = -180 - math.degrees(math.atan2(self.direction[0], self.direction[1])) * -1
-		return rotate_img(self.drawImg, spin)
+		return rotate_img(self.drawImg, -90 - math.degrees(math.atan2(self.direction[1], self.direction[0])))
 
 	def draw(self):
 		shownImg = self.get_turned_image()
 		DISPLAYSURF.blit(shownImg, shownImg.get_rect(center=self.rect.center))
+		#pygame.draw.rect(DISPLAYSURF, WHITE, self.rect, 1)
 
 	def sub(self, message):
 		add_observer(self, message)
@@ -191,19 +192,19 @@ class ListenSprite(pygame.sprite.Sprite):
 
 
 class Explosion(ListenSprite):
-	def __init__(self, x, y):
+	def __init__(self, x, y, rate=3):
 		super(Explosion, self).__init__(x, y)
 		self.imgs = BOOMLIST
 		self.counter = 0
-		self.allimgs = len(self.imgs)
+		self.rate = rate
 		self.drawImg = self.imgs[0]
 		self.rect = self.drawImg.get_rect(center=(self.x, self.y))
 		self.direction = random.choice(DIR_VALS)
 		
 	def update(self):
 		self.counter += 1
-		imgindex = self.counter / 3
-		if imgindex < self.allimgs:
+		imgindex = self.counter / self.rate
+		if imgindex < len(self.imgs):
 			self.drawImg = self.imgs[imgindex]
 			self.resize_rect()
 		else:
@@ -278,7 +279,7 @@ class MultiText(TextObj):
 	def update(self):
 		self.counter += 1
 		if self.counter >= self.switch:
-			oldX, oldY = self.rect.center
+			#oldX, oldY = self.rect.center
 			if self.text == self.all_texts[-1]:
 				next_index = 0
 			else:
@@ -314,10 +315,9 @@ class Player(ListenSprite):
 		"""
 		self.__init__(SCREENWIDTH / 2, SCREENHEIGHT / 2)
 
-	def handle_event(self, event):
-		if event.type == pygame.KEYDOWN:
-			if event.key in KEY_VAL and self.cooldown == 0:
-				self.fire(KEY_VAL[event.key])
+	def handle_key(self, eventkey):
+		if eventkey in KEY_VAL and self.cooldown == 0:
+			self.fire(KEY_VAL[eventkey])
 				
 	def fire(self, shotDirection):
 		"""Fires a shot."""
@@ -385,9 +385,8 @@ class Player(ListenSprite):
 			topX, topY = self.rect.topleft
 			for index, piece in enumerate([(x, y) for x in (0, halfw) for y in (0, halfh)]):
 				BustedRect = pygame.Rect(piece[0], piece[1], halfw, halfh)
-				BustedPiece = ShipPiece(topX if piece[0] == 0 else topX + halfw, 
-										topY if piece[1] == 0 else topY + halfh,
-										rotated_img.subsurface(BustedRect),
+				BustedCoords = (topX if piece[0] == 0 else topX + halfw, topY if piece[1] == 0 else topY + halfh)
+				BustedPiece = ShipPiece(BustedCoords[0], BustedCoords[1], rotated_img.subsurface(BustedRect),
 										DIR_DIAGS[index])
 				allqueue.add(BustedPiece)
 			playerDeadSound.play()
@@ -923,7 +922,7 @@ class GameLoop(object):
 					pygame.quit()
 					sys.exit()
 				elif event.type == pygame.KEYDOWN:
-					ship.handle_event(event)
+					ship.handle_key(event.key)
 					if event.key == pygame.K_p:
 						paused = False if paused else True
 			if not paused:
