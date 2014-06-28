@@ -136,8 +136,6 @@ BOOMTHR = ALLSHEET.image_at((64, 96, 32, 32), -1)
 BOOMFOR = ALLSHEET.image_at((96, 96, 32, 32), -1)
 BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR]
 
-def _default_action(self):
-	pass
 
 class ListenSprite(pygame.sprite.Sprite):
 	def __init__(self, x=1, y=1):
@@ -146,7 +144,10 @@ class ListenSprite(pygame.sprite.Sprite):
 		self.x = self.rect.center[0]
 		self.y = self.rect.center[1]
 		self.direction = [0, 0]
+		self.target = [0, 0]
+		self.counter = 0
 		self.speed = 0
+		self.visible = True
 
 	def __setattr__(self, k, v):
 		super(ListenSprite, self).__setattr__(k, v)
@@ -154,10 +155,32 @@ class ListenSprite(pygame.sprite.Sprite):
 			self.rect.center = (self.x, self.rect.center[1])
 		if k == 'y':
 			self.rect.center = (self.rect.center[0], self.y)
+			
+	def set_direction(self, target):
+		self.direction = [i / abs(i) if i != 0 else 0 for i in (target[0] - self.x, target[1] - self.y)]
+		if not [i for i in self.direction if i != 0]:
+			self.direction = [i * PT_SEVEN for i in self.direction]
+			
+	def set_target_with_distance(self, distance):
+		self.target[0] = self.x + ((self.direction[0]) * distance)
+		self.target[1] = self.y + ((self.direction[1]) * distance)
 
 	def move(self):
 		self.x += self.direction[0] * self.speed
 		self.y += self.direction[1] * self.speed
+	
+	def move_to_target(self, targetXY):
+		targetX, targetY = targetXY
+		absX, absY = (abs(targetX - self.x), abs(targetY - self.y))
+		if absX**2 + absY**2 >= self.speed**2:
+			self.set_direction((targetX, targetY))
+			self.move()
+			if absX < self.speed:
+				self.x = targetX
+			if absY < self.speed:
+				self.y = targetY
+		else:
+			self.x, self.y = targetX, targetY
 
 	def resize_rect(self):
 		"""Gets the current drawn image's bounding rect,
@@ -165,16 +188,17 @@ class ListenSprite(pygame.sprite.Sprite):
 		the current rect.
 		"""
 		#new_rect = self.drawImg.get_bounding_rect()
-		new_rect = self.get_turned_image().get_bounding_rect()
+		new_rect = self.get_shown_image().get_bounding_rect()
 		new_rect.center = self.rect.center
 		self.rect = new_rect
 
-	def get_turned_image(self):
+	def get_shown_image(self):
 		return rotate_img(self.drawImg, -90 - math.degrees(math.atan2(self.direction[1], self.direction[0])))
 
 	def draw(self):
-		shownImg = self.get_turned_image()
-		DISPLAYSURF.blit(shownImg, shownImg.get_rect(center=self.rect.center))
+		if self.visible:
+			shownImg = self.get_shown_image()
+			DISPLAYSURF.blit(shownImg, shownImg.get_rect(center=self.rect.center))
 		#pygame.draw.rect(DISPLAYSURF, WHITE, self.rect, 1)
 
 	def sub(self, message):
@@ -223,29 +247,30 @@ class TextObj(ListenSprite):
 		self.text = str(text)
 		self.color = color
 		self.font = font
-		self.find_to_blit()
-		self.find_rect()
+		self.pinned = False
+		self.to_blit = self.set_to_blit()
+		self.rect = self.find_rect()
 		
 	def pin_corner_to(self, corner, coordinates):
 		self.pinned = (corner, coordinates)
-		self.find_rect()
+		self.rect = self.find_rect()
 	
 	def set_text(self, text):
 		self.text = str(text)
-		self.find_to_blit()
-		self.find_rect()
+		self.to_blit = self.set_to_blit()
+		self.rect = self.find_rect()
 		
 	def set_ctr(self, newX, newY):
 		self.x, self.y = newX, newY
 		
-	def find_to_blit(self):
-		self.to_blit = self.font.render(self.text, True, self.color)
+	def set_to_blit(self):
+		return self.font.render(self.text, True, self.color)
 		
 	def find_rect(self): 
-		self.rect = self.to_blit.get_rect(center=(self.x, self.y))
-		is_pinned = getattr(self, 'pinned', False)
-		if is_pinned is not False:
-			setattr(self.rect, is_pinned[0], is_pinned[1])
+		new_rect = self.to_blit.get_rect(center=(self.x, self.y))
+		if self.pinned:
+			setattr(new_rect, self.pinned[0], self.pinned[1])
+		return new_rect
 
 	def draw(self):
 		DISPLAYSURF.blit(self.to_blit, self.rect)
@@ -261,7 +286,7 @@ class RisingPoints(TextObj):
 	def update(self):
 		self.counter -= 1
 		self.move()
-		self.find_rect()
+		self.rect = self.find_rect()
 		if self.counter < 0:
 			self.kill()
 			
@@ -271,22 +296,23 @@ class MultiText(TextObj):
 	"""
 	def __init__(self, x=0, y=0, text='_default_', all_texts=None, color=RED, font=GAMEFONT, switch=FPS):
 		super(MultiText, self).__init__(x, y, text, color, font)
-		self.all_texts = [] if all_texts is None else all_texts
+		self.all_texts = all_texts or [text]
 		self.counter = 0
-		self.switch = switch
+		self.switch = int(switch)
 		self.set_text(self.all_texts[0])
 		
 	def update(self):
+		current_text = self.counter / self.switch
 		self.counter += 1
-		if self.counter >= self.switch:
-			#oldX, oldY = self.rect.center
-			if self.text == self.all_texts[-1]:
-				next_index = 0
-			else:
-				next_index = self.all_texts.index(self.text) + 1
-			self.set_text(self.all_texts[next_index])
-			self.find_rect()
+		next_text = self.counter / self.switch
+		if next_text >= len(self.all_texts):
 			self.counter = 0
+			next_text = 0
+		if current_text != next_text:
+			self.set_text(self.all_texts[next_text])
+			self.rect = self.find_rect()
+				
+			
 
 class Player(ListenSprite):
 	def __init__(self, x, y):
@@ -297,6 +323,7 @@ class Player(ListenSprite):
 		self.rect = self.img.get_rect(center=(self.x, self.y))
 		self.cooldown = 0
 		self.respawn = 0
+		self.visible = True
 		self.lives = 3
 		self.score = 0
 		self.extra_guy_counter = 1
@@ -327,6 +354,15 @@ class Player(ListenSprite):
 		allqueue.add(shot)
 		self.cooldown = 10
 		playerShotSound.play()
+		
+	def is_visible(self):
+		if not self.lives:
+			return False
+		if self.respawn > FPS:
+			return False
+		if FPS > self.respawn > 0:
+			return True if self.respawn % 3 == 1 else False
+		return True
 
 	def update(self):
 		"""Updates ship coordinates. 
@@ -337,38 +373,19 @@ class Player(ListenSprite):
 		Finally, counts down weapon cooldown, respawn (if needed), 
 		and checks to see if its point total grants it an extra life.
 		"""
-		mouseX, mouseY = pygame.mouse.get_pos()
-		absX, absY = (abs(mouseX - self.x), abs(mouseY - self.y))
-		if absX**2 + absY**2 >= self.speed**2:
-			self.set_heading((mouseX, mouseY))
-			self.move()
-			if absX < self.speed:
-				self.x = mouseX
-			if absY < self.speed:
-				self.y = mouseY
-		else:
-			self.x, self.y = mouseX, mouseY
+		self.move_to_target(pygame.mouse.get_pos())
 		self.resize_rect()
 		self.cooldown -= 1 if self.cooldown > 0 else 0
 		self.respawn -= 1 if self.respawn > 0 else 0
+		self.visible = self.is_visible()
 		if self.score >= (EARNEDEXTRAGUY * self.extra_guy_counter):	#grants an extra life every X points
 			self.lives += 1
 			self.extra_guy_counter += 1
 			
-	def set_heading(self, mouse_pos):
-		newX = mouse_pos[0] - self.x
-		newY = mouse_pos[1] - self.y
-		pre_heading = map(lambda n: n / abs(n) if n != 0 else 0, (newX, newY))
-		if pre_heading[0] != 0 and pre_heading[1] != 0:
-			pre_heading = map(lambda x: x * PT_SEVEN, pre_heading)
-		self.direction = pre_heading
-
-	def draw(self):
-		"""Hook for the controller's draw() call.
-		If not respawning, draw. If half-way done respawning, flicker.
-		"""
-		if not self.respawn or (self.respawn <= FPS and (self.respawn % 3 == 1)):
-			super(Player, self).draw()
+	def set_direction(self, target):
+		self.direction = [i / abs(i) if i != 0 else 0 for i in (target[0] - self.x, target[1] - self.y)]
+		if self.direction[0] != 0 and self.direction[1] != 0:
+			self.direction = [i * PT_SEVEN for i in self.direction]
 
 	def got_hit(self):
 		"""Hook for controller's got_hit() call. 
@@ -378,19 +395,22 @@ class Player(ListenSprite):
 			self.respawn = FPS * 2
 			self.cooldown = FPS * 2
 			self.lives -= 1
-			rotated_img = self.get_turned_image()
+			rotated_img = self.get_shown_image()
 			img_rect = rotated_img.get_rect()
 			halfw = img_rect.width / 2
 			halfh = img_rect.height / 2
 			topX, topY = self.rect.topleft
 			for index, piece in enumerate([(x, y) for x in (0, halfw) for y in (0, halfh)]):
 				BustedRect = pygame.Rect(piece[0], piece[1], halfw, halfh)
-				BustedCoords = (topX if piece[0] == 0 else topX + halfw, topY if piece[1] == 0 else topY + halfh)
-				BustedPiece = ShipPiece(BustedCoords[0], BustedCoords[1], rotated_img.subsurface(BustedRect),
+				BustedCoords = (topX if piece[0] == 0 else topX + halfw, 
+								topY if piece[1] == 0 else topY + halfh)
+				BustedPiece = ShipPiece(BustedCoords[0], BustedCoords[1], 
+										rotated_img.subsurface(BustedRect),
 										DIR_DIAGS[index])
 				allqueue.add(BustedPiece)
 			playerDeadSound.play()
 		if not self.lives:
+			self.visible = False
 			self.kill()
 			
 class ShipPiece(ListenSprite):
@@ -406,12 +426,38 @@ class ShipPiece(ListenSprite):
 		self.counter -= 1
 		self.move()
 		self.resize_rect()
+		self.visible = True if self.counter % 3 == 1 else False
 		if self.counter <= 0:
 			self.kill()
+			
+	def get_shown_image(self):
+		return self.drawImg
+
+			
+class PlayerMouse(ListenSprite):
+	def __init__(self, x, y, target, size=9):
+		super(PlayerMouse, self).__init__(x, y)
+		self.size = size
+		self.color = self.set_color()
+		self.rect = self.set_rect()
+		self.target = target
+		
+	def set_color(self):
+		return (random.randrange(60, 220), random.randrange(60, 220), random.randrange(60, 220))
+		
+	def set_rect(self):
+		self.x, self.y = pygame.mouse.get_pos()
+		new_rect = pygame.Rect(0, 0, self.size, self.size)
+		new_rect.center = self.x, self.y
+		return new_rect
+		
+	def update(self):
+		self.color = self.set_color()
+		self.rect = self.set_rect()
 		
 	def draw(self):
-		if self.counter % 3 == 1:
-			DISPLAYSURF.blit(self.drawImg, self.rect)
+		if self.target.visible and not self.rect.colliderect(self.target.rect):
+			pygame.draw.rect(DISPLAYSURF, self.color, self.rect, 1)
 
 
 class Enemy(ListenSprite):
@@ -424,19 +470,18 @@ class Enemy(ListenSprite):
 		self.range = random.randrange(60, 120)
 		self.counter = random.randrange(0, self.range)
 		self.direction = random.choice(dirs)
+		self.set_target_with_distance(self.range - self.counter)
 		self.rect = self.drawImg.get_rect(center=(self.x, self.y))
 		self.speed = 3
 		self.cooldown = FPS / 2
 		self.points = 100
 
 	def update(self):
-		"""Calls all the methods!
-		Try not to replace .move().
-		The rest can be replace on-the-fly to act as new AI.
+		"""obj.unique_action is 'where the action is' lulz
+		Replace that to make the enemy do different stuff.
+		self.resize_rect is a bit clutch, so don't replace that.
 		"""
 		self.unique_action()
-		self.shot_check()
-		self.move()
 		self.resize_rect()
 	
 	def unique_action(self):
@@ -447,11 +492,14 @@ class Enemy(ListenSprite):
 		if self.counter >= self.range or is_out_of_bounds(self.rect.center):
 			self.counter = 0
 			self.bounce()
+			self.set_target_with_distance(self.range)
 		else:
 			self.counter += self.speed
+		self.move_to_target(self.target)
+		self.shot_check()
 		
 	def bounce(self):
-		self.direction = map(lambda p: p * -1, self.direction)
+		self.direction = [-i for i in self.direction]
 
 	def got_hit(self):
 		"""Simple hook to override got_hit in the event a badguy has 'hitpoints'
@@ -471,10 +519,10 @@ class Enemy(ListenSprite):
 	def fire(self):
 		"""Fires a shot in a random direction."""
 		shotx, shoty = self.rect.center
-		badShot = Bullet(shotx, shoty, random.choice(DIR_VALS))
+		badShot = Bullet(shotx, shoty, random.choice(DIR_VALS), BADGUYSHOT)
 		badShot.speed = 4
-		badShot.color = LIGHTRED
-		badShot.drawImg = BADGUYSHOT
+		#badShot.color = LIGHTRED
+		#badShot.drawImg = BADGUYSHOT
 		badqueue.add(badShot)
 		allqueue.add(badShot)
 		self.cooldown = FPS / 2
@@ -482,16 +530,16 @@ class Enemy(ListenSprite):
 
 class Bullet(ListenSprite):
 	"""Bullet object. When it hits things, they blows up."""
-	def __init__(self, x, y, direction):
+	def __init__(self, x, y, direction, drawImg=GOODGUYSHOT):
 		super(Bullet, self).__init__(x, y)
 		self.direction = direction
 		self.range = SCREENDIAG + 20
 		self.counter = 0
-		self.drawImg = GOODGUYSHOT
+		self.drawImg = drawImg
 		self.rect = self.drawImg.get_rect(center=(self.x, self.y))
 		self.resize_rect()
 		self.speed = 10
-		self.color = GREEN
+		#self.color = GREEN
 		self.points = 0
 
 	def update(self):
@@ -500,10 +548,9 @@ class Bullet(ListenSprite):
 		self.counter += self.speed
 		if is_out_of_bounds(self.rect.center, offset=50) or self.counter >= self.range:
 			self.kill()
-	
-	def draw(self):
-		drawCtr = self.drawImg.get_rect(center=self.rect.center)
-		DISPLAYSURF.blit(self.drawImg, drawCtr)
+			
+	def get_shown_image(self):
+		return self.drawImg
 
 	def got_hit(self):
 		self.kill()
@@ -524,7 +571,7 @@ class Starfield(object):
 		self.stars = stars
 		self.starfield = []
 		self.add_stars()
-		self.direction = DOWNLEFT
+		self.direction = DOWN
 		
 	def add_stars(self, stars='_default'):
 		"""Adds X stars to self.starfield, which is just a list.
@@ -534,44 +581,47 @@ class Starfield(object):
 		if stars is '_default':
 			stars = self.stars
 		for i in xrange(stars):
-			x = random.randint(0, SCREENWIDTH)
-			y = random.randint(0, SCREENHEIGHT)
-			self.starfield.append([x, y])
+			self.starfield.append([random.randint(0, i) for i in (SCREENWIDTH, SCREENHEIGHT)])
 
 	def update(self):
 		"""Creates a parallax effect by moving stars at different speeds 
 		and with different colors. When a star goes offscreen, 
 		it is given new semi-random values.
 		"""
-		starCounter = 0
-		for star in self.starfield:
-			starCounter += 1
+		for i, star in enumerate(self.starfield):
 			old_star = [p for p in star]
-			star_speed = 1
-			starcolor = (120, 70, 70)
-			if starCounter % 3 == 1:
-				star_speed += 1
-				starcolor = (180, 100, 100)
-			if starCounter % 5 == 1:
-				star_speed += 1
-				starcolor = (180, 150, 150)
-			star[0] += (star_speed * self.direction[0])
-			star[1] += (star_speed * self.direction[1])
+			speed = 1
+			color = (120, 70, 70)
+			if i % 3 == 1:
+				speed += 1
+				color = (180, 100, 100)
+			if i % 5 == 1:
+				speed += 1
+				color = (180, 150, 150)
+			for j, p in enumerate(star):
+				star[j] += speed * self.direction[j]
 			#DRAW STARS BEFORE CHECKING FOR OFFSCREEN.
 			#Otherwise the old and new stars make random diagonal lines.
-			pygame.draw.line(DISPLAYSURF, starcolor, old_star, star, 1)
+			blinkrate = speed * 7
+			if random.randint(0, blinkrate) > blinkrate - 1:
+				color = [int(c * .25 * speed) for c in color]
+			pygame.draw.line(DISPLAYSURF, color, old_star, star, 1)
 			if not -1 < star[0] < SCREENWIDTH + 1:
 				star[1] = random.randrange(0, SCREENHEIGHT)
-				star[0] = SCREENWIDTH if star[0] <= 0 else 0
+				star[0] = SCREENWIDTH + speed if star[0] <= 0 else 0 - speed
 			if not -1 < star[1] < SCREENHEIGHT + 1:
 				star[0] = random.randrange(0, SCREENWIDTH)
-				star[1] = SCREENHEIGHT if star[1] <= 0 else 0
+				star[1] = SCREENHEIGHT + speed if star[1] <= 0 else 0 - speed
+	 
+		
 			
 STARFIELDBG = Starfield()
 
 #alternative patterns of movement for Enemy() added via strategy patterns, thanks AC
 def sweep_strategy(obj, func):
 	def inner(*args, **kwargs):
+		obj.move()
+		obj.shot_check()
 		if obj.x > SCREENWIDTH + 30:
 			obj.y = random.randrange(25, (SCREENHEIGHT - 25))
 			obj.x = -20
@@ -592,26 +642,7 @@ def rammer_strategy(obj, func):
 	If the ship is NOT respawning, the ship is of course the target.
 	"""
 	def inner(*args, **kwargs):
-		obj.cooldown = 5 #placeholder, keeps it from seeking AND shooting
-		selfX, selfY = obj.rect.center
-		seekX, seekY = obj.origin if ship.respawn else ship.rect.center
-		newDirection = '' #this can safely be assigned to self.direction; it simply won't do anything.
-		absX = abs(selfX - seekX)
-		absY = abs(selfY - seekY)
-		if math.hypot(absX, absY) > obj.speed:
-			if seekY > selfY and absY > obj.speed:
-				newDirection += 'down'
-			elif seekY < selfY:
-				newDirection += 'up'
-			else:
-				pass
-			if seekX > selfX and absX > obj.speed:
-				newDirection += 'right'
-			elif seekX < selfX:
-				newDirection += 'left'
-			else:
-				pass
-		obj.direction = newDirection
+		obj.move_to_target(obj.origin if ship.respawn else ship.rect.center)
 	obj.speed -= 1
 	obj.points = 300
 	return inner
@@ -625,7 +656,13 @@ def teleport_strategy(obj, func):
 	which replaces enemy.draw() to achieve a flickering effect before transport.
 	"""
 	def inner(*args, **kwargs):
+		obj.move()
+		obj.shot_check()
 		obj.counter -= 1
+		if obj.counter % 5 or obj.counter in xrange((FPS / 2), (FPS * 2)):
+			obj.visible = True
+		else:
+			obj.visible = False
 		if obj.counter <= 0:
 			shipX, shipY = [int(x) for x in ship.rect.center]
 			safex = range(10, (shipX - 55)) + range((shipX + 55), (SCREENWIDTH - 10))
@@ -640,22 +677,8 @@ def teleport_strategy(obj, func):
 	obj.drawImg = GREENSHIPIMG
 	obj.points = 200
 	obj.speed -= 1
-	obj.draw = draw_teleport_strategy(obj)
 	return inner
-		
-def draw_teleport_strategy(obj):
-	"""Used in concert with enemy_teleport() to create a teleporter.
-	At present, the draw method needs to be altered to create the 
-	"blink" effect of the enemy teleporting to a new location, 
-	so both unique_action() AND draw() need to be replaced. 
-	This might change later, since it's kind of dumb.
-	"""
-	def inner(*args, **kwargs):
-		if obj.counter % 5 or obj.counter in xrange((FPS / 2), (FPS * 2)):
-			shownImg = obj.get_turned_image()
-			DISPLAYSURF.blit(shownImg, shownImg.get_rect(center=obj.rect.center))
-		else: pass
-	return inner
+
 		
 def enemy_boomer(self):
 	"""Comes in from the borders and then blows up for big damages."""
@@ -797,7 +820,6 @@ class GameHandler(object):
 						next_char = str(event.unicode)
 						if next_char.isalnum():	#keeps input limited to letters/numbers
 							playerInitials.set_text(playerInitials.text + next_char.upper())
-						else: pass
 					else:
 						displayScores = False
 			if collectScore:		#if collectScore, get the score
@@ -809,7 +831,6 @@ class GameHandler(object):
 					congratsText.draw()
 					if playerInitials.text:
 						playerInitials.draw()
-					else: pass
 				else:
 					scoreList.append([playerInitials.text, ship.score])
 					scoreList.sort(key=lambda x: x[1])
@@ -865,17 +886,14 @@ class GameLoop(object):
 			safex = range(10, (shipX - 25)) + range((shipX + 25), (SCREENWIDTH - 10))
 			safey = range(10, (shipY - 25)) + range((shipY + 25), (SCREENHEIGHT - 10))
 			enemy = Enemy(random.choice(safex), random.choice(safey))
-			pt_bonus = 0
 			newAI = random.choice((kindsOfAI))
-			#newAI = a_thing_to_test
+			#newAI = teleport_strategy
 			if newAI:
 				enemy.unique_action = newAI(enemy, enemy.unique_action)
 			enemy.kill = make_explosion(enemy, enemy.kill)
-			for tick in xrange(0, difficulty):
-				if coinflip():
-					enemy.speed *= 1.05
-					pt_bonus += 1
-			enemy.points = enemy.points + ((enemy.points / 10) * pt_bonus)
+			variance = random.randint(0, difficulty)
+			enemy.speed = int(math.floor(enemy.speed * (1.05 ** variance)))
+			enemy.points = int(math.floor(enemy.points + ((enemy.points / 10) * variance)))
 			self.badqueue.add(enemy)
 			self.allqueue.add(enemy)
 
@@ -899,12 +917,12 @@ class GameLoop(object):
 		levelText.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 20))
 		
 		self.textqueue.add(scoreText, scoreNumText, livesText, livesNumText, levelText)
+		self.allqueue.add(PlayerMouse(*pygame.mouse.get_pos(), target=ship))
 		
 		gameoverText = TextObj(0, 0, 'G  A  M  E    O  V  E  R', GREEN, gameoverFont)
 		gameoverText.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 2))
 		
 		go_to_gameover = FPS * 3
-		running = True
 		paused = False
 		
 		scoreNumText.ship_set_score = scoreNumText.set_text
@@ -912,11 +930,11 @@ class GameLoop(object):
 		livesNumText.ship_set_lives = livesNumText.set_text
 		livesNumText.sub('ship_set_lives')
 		
-		STARFIELDBG.direction = random.choice(DIR_VALS)
+		if stage % 4 == 0 and difficulty > 0:
+			other_dirs = [d for d in DIR_VALS if d != STARFIELDBG.direction]
+			STARFIELDBG.direction = random.choice(other_dirs)
 		
-		while running:
-			DISPLAYSURF.fill(BLACK)
-			STARFIELDBG.update()
+		while True:
 			for event in pygame.event.get(): #get player events and pass them to the ship's event handler
 				if event.type == pygame.QUIT:
 					pygame.quit()
@@ -938,16 +956,14 @@ class GameLoop(object):
 								allqueue.add(PointsObj)
 								ship.score += baddie.points
 					goodguy.got_hit()
-				
-			for thing in self.allqueue:
-				thing.draw()
-			for thing in self.textqueue:
-				thing.draw()
-			if ship.lives > 0 and not ship.respawn:
-				cursorx, cursory = pygame.mouse.get_pos()
-				if abs(ship.x - cursorx)**2 + abs(ship.y - cursory) > ship.speed**2:
-					cursorrgb = (random.randrange(60, 220), random.randrange(60, 220), random.randrange(60, 220))
-					pygame.draw.rect(DISPLAYSURF, cursorrgb, (cursorx - 3, cursory - 3, 9, 9), 1)
+			
+			
+			DISPLAYSURF.fill(BLACK)
+			STARFIELDBG.update()
+			for obj in self.allqueue:
+				obj.draw()
+			for text in self.textqueue:
+				text.draw()
 			if not ship.lives:
 				go_to_gameover -= 1
 				if gameoverText not in self.textqueue:

@@ -1,4 +1,5 @@
 from collections import defaultdict
+from threading import Thread
 
 Obvs = defaultdict(set)	#dict to hold observers. key:value is "message":set("objects")
 
@@ -17,7 +18,7 @@ def rm_from_all(obj):
 		if obj in Obvs[message]:
 			Obvs[message].remove(obj)
 
-def msg(obj, message=None, *args, **kwargs):
+def new_msg(obj, message=None, *args, **kwargs):
 	if message is not None:
 		return getattr(obj, message)(*args, **kwargs)
 	else:
@@ -25,6 +26,21 @@ def msg(obj, message=None, *args, **kwargs):
 			return getattr(obj, kwargs['get'])
 		elif 'set' in kwargs:
 			return setattr(obj, kwargs['set'][0], kwargs['set'][1])
+			
+def thread_msg(obj, message=None, *args, **kwargs):
+	if message is not None:
+		process = lambda: getattr(obj, message)(*args, **kwargs)
+	else:
+		if 'get' in kwargs:
+			process = lambda: getattr(obj, kwargs['get'])
+		elif 'set' in kwargs:
+			process = lambda: setattr(obj, kwargs['set'][0], kwargs['set'][1])
+	work = Thread(target=process)
+	work.start()
+	work.join()
+	
+msg = new_msg
+			
 			
 def notify(obj, message, *args, **kwargs):
 	"""Sends message to target and observers."""
