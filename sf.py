@@ -234,12 +234,13 @@ class Explosion(ListenSprite):
 		else:
 			self.kill()
 		
-		
+"""		
 def make_explosion(obj, func):
 	def inner(*args, **kwargs):
 		allqueue.add(Explosion(obj.x, obj.y))
 		return func(*args, **kwargs)
 	return inner
+"""
 	
 class TextObj(ListenSprite):
 	def __init__(self, x=0, y=0, text='_default_', color=RED, font=GAMEFONT):
@@ -277,11 +278,12 @@ class TextObj(ListenSprite):
 		
 class RisingPoints(TextObj):
 	"""A TextObj that rises and self-terminates after its counter reaches 0."""
-	def __init__(self, x=0, y=0, text='_default_', color=RED, font=GAMEFONT, counter=45, speed=1, direction=UP):
+	def __init__(self, x=0, y=0, text='_default_', color=LIGHTRED, font=pygame.font.Font('freesansbold.ttf', 10), counter=45, speed=1, direction=UP):
 		super(RisingPoints, self).__init__(x, y, text, color, font)
 		self.counter = counter
 		self.speed = speed
 		self.direction = direction
+		
 		
 	def update(self):
 		self.counter -= 1
@@ -336,11 +338,11 @@ class Player(ListenSprite):
 		if k in ('score', 'lives'):
 			self.pub('ship_set_{}'.format(k), v)
 		
-	def ready_new_game(self):
+	def ready_new_game(self, x, y):
 		"""Gets the ship ready for a new game.
 		Has static values for now, might change this to use variable values.
 		"""
-		self.__init__(SCREENWIDTH / 2, SCREENHEIGHT / 2)
+		self.__init__(x, y)
 
 	def handle_key(self, eventkey):
 		if eventkey in KEY_VAL and self.cooldown == 0:
@@ -348,10 +350,7 @@ class Player(ListenSprite):
 				
 	def fire(self, shotDirection):
 		"""Fires a shot."""
-		shotx, shoty = self.rect.center
-		shot = Bullet(shotx, shoty, shotDirection)
-		goodqueue.add(shot)
-		allqueue.add(shot)
+		self.pub('made_like_object', self, Bullet, x=self.x, y=self.y, direction=shotDirection)
 		self.cooldown = 10
 		playerShotSound.play()
 		
@@ -366,12 +365,9 @@ class Player(ListenSprite):
 
 	def update(self):
 		"""Updates ship coordinates. 
-		Gets the difference between ship's x and y position 
-		and the mouse's current x and y position; if the difference 
-		is less than ship.speed, it moves right to that spot. Else, 
-		just moves at a constant rate towards the mouse.
-		Finally, counts down weapon cooldown, respawn (if needed), 
-		and checks to see if its point total grants it an extra life.
+		Uses move_to_target to follow the mouse.
+		Counts cooldown and respawn to 0 when needed
+		and checks its point total for extra lives.
 		"""
 		self.move_to_target(pygame.mouse.get_pos())
 		self.resize_rect()
@@ -402,12 +398,14 @@ class Player(ListenSprite):
 			topX, topY = self.rect.topleft
 			for index, piece in enumerate([(x, y) for x in (0, halfw) for y in (0, halfh)]):
 				BustedRect = pygame.Rect(piece[0], piece[1], halfw, halfh)
-				BustedCoords = (topX if piece[0] == 0 else topX + halfw, 
-								topY if piece[1] == 0 else topY + halfh)
-				BustedPiece = ShipPiece(BustedCoords[0], BustedCoords[1], 
-										rotated_img.subsurface(BustedRect),
-										DIR_DIAGS[index])
-				allqueue.add(BustedPiece)
+				bustedX = topX if piece[0] == 0 else topX + halfw
+				bustedY = topY if piece[1] == 0 else topY + halfh
+				self.pub(
+							'made_object', self, ShipPiece, 
+							x=bustedX, y=bustedY,
+							img_piece=rotated_img.subsurface(BustedRect),
+							direction=DIR_DIAGS[index]
+					)
 			playerDeadSound.play()
 		if not self.lives:
 			self.visible = False
@@ -505,6 +503,8 @@ class Enemy(ListenSprite):
 		"""Simple hook to override got_hit in the event a badguy has 'hitpoints'
 		or some other effect.
 		"""
+		self.pub('made_object', self, Explosion, x=self.x, y=self.y)
+		self.pub('made_object', self, RisingPoints, x=self.x, y=self.y, text=self.points)
 		enemyDeadSound.play()
 		self.kill()
 
@@ -518,19 +518,16 @@ class Enemy(ListenSprite):
 				
 	def fire(self):
 		"""Fires a shot in a random direction."""
-		shotx, shoty = self.rect.center
-		badShot = Bullet(shotx, shoty, random.choice(DIR_VALS), BADGUYSHOT)
-		badShot.speed = 4
-		#badShot.color = LIGHTRED
-		#badShot.drawImg = BADGUYSHOT
-		badqueue.add(badShot)
-		allqueue.add(badShot)
+		self.pub(
+					'made_like_object', self, Bullet, x=self.x, y=self.y, 
+					direction=random.choice(DIR_VALS), drawImg=BADGUYSHOT, speed=4
+			)
 		self.cooldown = FPS / 2
 		enemyShotSound.play()
 
 class Bullet(ListenSprite):
 	"""Bullet object. When it hits things, they blows up."""
-	def __init__(self, x, y, direction, drawImg=GOODGUYSHOT):
+	def __init__(self, x, y, direction, drawImg=GOODGUYSHOT, speed=10):
 		super(Bullet, self).__init__(x, y)
 		self.direction = direction
 		self.range = SCREENDIAG + 20
@@ -538,8 +535,7 @@ class Bullet(ListenSprite):
 		self.drawImg = drawImg
 		self.rect = self.drawImg.get_rect(center=(self.x, self.y))
 		self.resize_rect()
-		self.speed = 10
-		#self.color = GREEN
+		self.speed = speed
 		self.points = 0
 
 	def update(self):
@@ -554,12 +550,41 @@ class Bullet(ListenSprite):
 
 	def got_hit(self):
 		self.kill()
+		
+class ObjLoader(object):
+	"""Puts objects in the queues so sprite objects
+	don't need to 'know about' the queues, just send
+	a 'created_obj_at' message."""
+	def __init__(self):
+		self.sub('made_object')
+		self.sub('made_like_object')
+		
+	def sub(self, msg):
+		add_observer(self, msg)
+		
+	def made_like_object(self, sender, objtype, **kwargs):
+		"""Creates new object and places it in
+		the same Sprite Groups that the message
+		sender belongs to.
+		"""
+		new_obj = objtype(**kwargs)
+		for group in sender.groups():
+			group.add(new_obj)
+			
+	def made_object(self, sender, objtype, **kwargs):
+		"""Creates new object and places it 
+		just in the allqueue.
+		"""
+		new_obj = objtype(**kwargs)
+		allqueue.add(new_obj)
 
 #eventually put this in a better place
 ship = Player(SCREENWIDTH / 2, SCREENHEIGHT / 2)
 goodqueue = pygame.sprite.Group()
 badqueue = pygame.sprite.Group()
 allqueue = pygame.sprite.Group()
+
+Loader = ObjLoader() ##set and forget this guy :)
 
 class Starfield(object):
 	"""A starfield background. 
@@ -622,18 +647,12 @@ def sweep_strategy(obj, func):
 	def inner(*args, **kwargs):
 		obj.move()
 		obj.shot_check()
-		if obj.x > SCREENWIDTH + 30:
+		if not -30 < obj.x < SCREENWIDTH + 30:
 			obj.y = random.randrange(25, (SCREENHEIGHT - 25))
-			obj.x = -20
-		if obj.x < -30:
-			obj.y = random.randrange(25, (SCREENHEIGHT - 25))
-			obj.x = SCREENWIDTH + 20
-		if obj.y > SCREENHEIGHT + 30:
+			obj.x = SCREENWIDTH + 20 if obj.x <= 0 else -20
+		if not -30 < obj.y < SCREENHEIGHT + 30:
 			obj.x = random.randrange(25, (SCREENWIDTH - 25))
-			obj.y = -20
-		if obj.y < -30:
-			obj.x = random.randrange(25, (SCREENWIDTH - 25))
-			obj.y = SCREENHEIGHT + 20
+			obj.y = SCREENHEIGHT + 20 if obj.y <= 0 else -20
 	return inner
 	
 def rammer_strategy(obj, func):
@@ -708,12 +727,7 @@ def enemy_boomer(self):
 		self.color = YELLOW		#not-so-great with sprites.
 		self.speed = 3
 
-def make_shot(firing_obj, direction):
-		shotx, shoty = firing_obj.rect.center
-		shot = Bullet(shotx, shoty, direction)
-		for queue in firing_obj.groups():
-			queue.add(shot)
-			
+
 class Scene(object):
 	def __init__(self, texts={}, queues={}):
 		self.texts = texts
@@ -760,7 +774,7 @@ class GameHandler(object):
 					sys.exit()
 				elif event.type == pygame.KEYDOWN: #prepare for new game
 					pygame.mouse.set_pos([SCREENWIDTH / 2, SCREENHEIGHT / 2])
-					ship.ready_new_game()
+					ship.ready_new_game(SCREENWIDTH / 2, SCREENHEIGHT / 2)
 					goodqueue.add(ship)
 					allqueue.add(ship)
 					waiting = False
@@ -846,10 +860,13 @@ class GameHandler(object):
 				totalScores = 1
 				while scoremaking:
 					for initials, hiscore in scoreList:
-						initialText = TextObj(0, 0, initials, GREEN, GAMEFONT)
-						initialText.pin_corner_to('center', (SCREENWIDTH / 3, (SCREENWIDTH / 8) * totalScores))
-						hiscoreText = TextObj(0, 0, hiscore, GREEN, GAMEFONT)
-						hiscoreText.pin_corner_to('center', (2*(SCREENWIDTH / 3), (SCREENWIDTH / 8) * totalScores))
+						nextX, nextY = (SCREENWIDTH / 3, ((SCREENHEIGHT + 150) / 8) * totalScores)
+						colormod = (1.0 - float(nextY) / SCREENHEIGHT)
+						scorecolor = [int(c * colormod) for c in (50, 250, 50)]
+						initialText = TextObj(0, 0, initials, scorecolor, GAMEFONT)
+						initialText.pin_corner_to('center', (nextX, nextY))
+						hiscoreText = TextObj(0, 0, hiscore, scorecolor, GAMEFONT)
+						hiscoreText.pin_corner_to('center', (nextX * 2, nextY))
 						topScores.add(initialText, hiscoreText)
 						totalScores += 1
 					scoremaking = False
@@ -890,7 +907,6 @@ class GameLoop(object):
 			#newAI = teleport_strategy
 			if newAI:
 				enemy.unique_action = newAI(enemy, enemy.unique_action)
-			enemy.kill = make_explosion(enemy, enemy.kill)
 			variance = random.randint(0, difficulty)
 			enemy.speed = int(math.floor(enemy.speed * (1.05 ** variance)))
 			enemy.points = int(math.floor(enemy.points + ((enemy.points / 10) * variance)))
@@ -909,7 +925,6 @@ class GameLoop(object):
 		
 		livesText = TextObj(0, 0, 'Lives:', WHITE, statsFont)
 		livesText.pin_corner_to('topright', (SCREENWIDTH - (SCREENWIDTH / 19), 15))
-		#livesText.x, livesText.y = livesText.rect.center
 		livesNumText = TextObj(0, 0, ship.lives, WHITE, statsFont)
 		livesNumText.pin_corner_to('topleft', (livesText.rect.topright[0] + 5, livesText.rect.topright[1]))
 								
@@ -951,9 +966,6 @@ class GameLoop(object):
 						for baddie in badguys:
 							baddie.got_hit()
 							if baddie not in self.badqueue and baddie.points:
-								PointsObj = RisingPoints(text=baddie.points, color=LIGHTRED, font=ptsFont)
-								PointsObj.set_ctr(baddie.rect.center[0], baddie.rect.center[1])
-								allqueue.add(PointsObj)
 								ship.score += baddie.points
 					goodguy.got_hit()
 			
