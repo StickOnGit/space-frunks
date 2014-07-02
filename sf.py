@@ -12,7 +12,7 @@ import random
 import sys
 import spritesheet
 import math
-from tenfwd import add_observer, rm_observer, rm_from_all, msg, publish
+from tenfwd import add_observer, rm_observer, rm_from_all, msg, publish, Obvs
 from os import path
 try:
 	import cPickle as pickle
@@ -459,9 +459,9 @@ class PlayerMouse(ListenSprite):
 
 
 class Enemy(ListenSprite):
-	def __init__(self, x, y, dirs=DIR_VALS):
+	def __init__(self, x, y, dirs=DIR_VALS, img=REDSHIPIMG):
 		super(Enemy, self).__init__(x, y)
-		self.img = ALLSHEET.image_at((32, 32, 32, 32), -1)
+		self.img = img
 		self.drawImg = self.img
 		self.shotrate = 20
 		self.origin = (x, y)
@@ -487,14 +487,14 @@ class Enemy(ListenSprite):
 		Replace this with new logic to change enemy behavior.
 		Default action is self.counter += 1 until > self.range, then reverse.
 		"""
-		if self.counter >= self.range or is_out_of_bounds(self.rect.center):
+		self.move_to_target(self.target)
+		self.shot_check()
+		if self.counter >= self.range or is_out_of_bounds(self.rect.center) or self.rect.center == self.target:
 			self.counter = 0
 			self.bounce()
 			self.set_target_with_distance(self.range)
 		else:
 			self.counter += self.speed
-		self.move_to_target(self.target)
-		self.shot_check()
 		
 	def bounce(self):
 		self.direction = [-i for i in self.direction]
@@ -524,6 +524,76 @@ class Enemy(ListenSprite):
 			)
 		self.cooldown = FPS / 2
 		enemyShotSound.play()
+		
+class Sweeper(Enemy):
+	def __init__(self, x, y, img=GREENSHIPIMG, max_x=SCREENWIDTH+30, max_y=SCREENHEIGHT+30):
+		super(Sweeper, self).__init__(x, y, img=img)
+		self.min_xy = -30
+		self.max_x = max_x
+		self.max_y = max_y
+		
+	def unique_action(self):
+		self.move()
+		self.shot_check()
+		if is_out_of_bounds(self.rect.center):
+			if not self.min_xy < self.x < self.max_x:
+				self.y = random.randrange(25, (self.max_y - 55))
+				self.x = self.max_x - 10 if self.x <= 0 else -20
+			if not self.min_xy < self.y < self.max_y:
+				self.x = random.randrange(25, (self.max_x - 55))
+				self.y = self.max_y - 10 if self.y <= 0 else -20
+				
+class Rammer(Enemy):
+	def __init__(self, x, y):
+		super(Rammer, self).__init__(x, y)
+		self.speed -= 1
+		self.points = 300
+		
+	def unique_action(self):
+		self.move_to_target(self.origin if ship.respawn else ship.rect.center)
+		
+class Teleporter(Enemy):
+	def __init__(self, x, y, img=GREENSHIPIMG, leftlane=(15, 40), rightlane=(SCREENWIDTH-40, SCREENWIDTH-15), uplane=(15, 40), downlane=(SCREENHEIGHT-40, SCREENHEIGHT-15)):
+		super(Teleporter, self).__init__(x, y, img=img)
+		self.points = 200
+		self.leftlane = range(leftlane[0], leftlane[1])
+		self.rightlane = range(rightlane[0], rightlane[1])
+		self.uplane = range(uplane[0], uplane[1])
+		self.downlane = range(downlane[0], downlane[1])
+		self.xlane = self.leftlane + self.rightlane
+		self.ylane = self.uplane + self.downlane
+		self.widex = range(self.xlane[0], self.xlane[-1])
+		self.widey = range(self.ylane[0], self.ylane[-1])
+		
+	def unique_action(self):
+		self.move()
+		self.shot_check()
+		if is_out_of_bounds(self.rect.center):
+			self.bounce()
+		self.counter -= 1
+		if self.counter % 5 or self.counter in xrange((FPS / 2), (FPS * 2)):
+			self.visible = True
+		else:
+			self.visible = False
+		if self.counter <= 0:
+			if coinflip():
+				self.x = random.choice(self.xlane)
+				self.y = random.choice(self.widey)
+			else:
+				self.y = random.choice(self.ylane)
+				self.x = random.choice(self.widex)
+			new_dir = DIR_VALS[:]
+			if self.x in self.leftlane:
+				new_dir = [d for d in new_dir if d[0] >= 0]
+			elif self.x in self.rightlane:
+				new_dir = [d for d in new_dir if d[0] <= 0]
+			if self.y in self.uplane:
+				new_dir = [d for d in new_dir if d[1] >= 0]
+			elif self.y in self.downlane:
+				new_dir = [d for d in new_dir if d[1] <= 0]
+			self.direction = random.choice(new_dir)
+			self.counter = FPS * 3
+			teleportSound.play()
 
 class Bullet(ListenSprite):
 	"""Bullet object. When it hits things, they blows up."""
@@ -643,89 +713,90 @@ class Starfield(object):
 STARFIELDBG = Starfield()
 
 #alternative patterns of movement for Enemy() added via strategy patterns, thanks AC
-def sweep_strategy(obj, func):
-	def inner(*args, **kwargs):
-		obj.move()
-		obj.shot_check()
-		if not -30 < obj.x < SCREENWIDTH + 30:
-			obj.y = random.randrange(25, (SCREENHEIGHT - 25))
-			obj.x = SCREENWIDTH + 20 if obj.x <= 0 else -20
-		if not -30 < obj.y < SCREENHEIGHT + 30:
-			obj.x = random.randrange(25, (SCREENWIDTH - 25))
-			obj.y = SCREENHEIGHT + 20 if obj.y <= 0 else -20
-	return inner
-	
-def rammer_strategy(obj, func):
-	"""Compares its x and y coordinates against the target and moves toward it.
-	If the ship is respawning, the target is its own x and y of origin. 
-	If the ship is NOT respawning, the ship is of course the target.
-	"""
-	def inner(*args, **kwargs):
-		obj.move_to_target(obj.origin if ship.respawn else ship.rect.center)
-	obj.speed -= 1
-	obj.points = 300
-	return inner
-		
-def teleport_strategy(obj, func):
-	"""This replaces unique_action.
-	When enemy.counter reaches 0 (or less), a new position 
-	and direction for enemy is chosen and the counter is reset 
-	to FPS * 3 (3 secs between teleports).
-	This should be used in concert with enemy_draw_teleport() 
-	which replaces enemy.draw() to achieve a flickering effect before transport.
-	"""
-	def inner(*args, **kwargs):
-		obj.move()
-		obj.shot_check()
-		obj.counter -= 1
-		if obj.counter % 5 or obj.counter in xrange((FPS / 2), (FPS * 2)):
-			obj.visible = True
-		else:
-			obj.visible = False
-		if obj.counter <= 0:
-			shipX, shipY = [int(x) for x in ship.rect.center]
-			safex = range(10, (shipX - 55)) + range((shipX + 55), (SCREENWIDTH - 10))
-			safey = range(10, (shipY - 55)) + range((shipY + 55), (SCREENHEIGHT - 10))
-			obj.x = random.choice(safex)
-			obj.y = random.choice(safey)
-			obj.direction = random.choice(DIR_VALS)
-			obj.counter = FPS * 3
-			teleportSound.play()
-		if is_out_of_bounds(obj.rect.center):
-			obj.bounce()
-	obj.drawImg = GREENSHIPIMG
-	obj.points = 200
-	obj.speed -= 1
-	return inner
-
-		
-def enemy_boomer(self):
-	"""Comes in from the borders and then blows up for big damages."""
-	startX, startY = self.origin
-	if abs(startX - self.x) >= SCREENWIDTH / 2 or abs(startY - self.y) >= SCREENHEIGHT / 2:
-		self.speed = self.speed - 1 if self.speed > 0 else 0
-		self.color = tuple([color+15 if color < 230 else 255 for color in self.color])
-	if self.color == WHITE:
-		shotx, shoty = self.rect.center
-		for direction in DIR_VALS:
-			badBullet = Bullet(shotx, shoty, direction)
-			badBullet.speed = 7
-			badBullet.range = 50
-			badBullet.color = LIGHTRED
-			badqueue.add(badBullet)
-			allqueue.add(badBullet)
-		if 'up' in self.direction:
-			self.y = SCREENHEIGHT + 10
-		if 'down' in self.direction:
-			self.y = -10
-		if 'left' in self.direction:
-			self.x = SCREENWIDTH + 10
-		if 'right' in self.direction:
-			self.x = -10
-			
-		self.origin = (self.rect.center)
-		self.color = YELLOW		#not-so-great with sprites.
-		self.speed = 3
+###
+#def sweep_strategy(obj, func):
+#	def inner(*args, **kwargs):
+#		obj.move()
+#		obj.shot_check()
+#		if not -30 < obj.x < SCREENWIDTH + 30:
+#			obj.y = random.randrange(25, (SCREENHEIGHT - 25))
+#			obj.x = SCREENWIDTH + 20 if obj.x <= 0 else -20
+#		if not -30 < obj.y < SCREENHEIGHT + 30:
+#			obj.x = random.randrange(25, (SCREENWIDTH - 25))
+#			obj.y = SCREENHEIGHT + 20 if obj.y <= 0 else -20
+#	return inner
+#	
+#def rammer_strategy(obj, func):
+#	"""Compares its x and y coordinates against the target and moves toward it.
+#	If the ship is respawning, the target is its own x and y of origin. 
+#	If the ship is NOT respawning, the ship is of course the target.
+#	"""
+#	def inner(*args, **kwargs):
+#		obj.move_to_target(obj.origin if ship.respawn else ship.rect.center)
+#	obj.speed -= 1
+#	obj.points = 300
+#	return inner
+#		
+#def teleport_strategy(obj, func):
+#	"""This replaces unique_action.
+#	When enemy.counter reaches 0 (or less), a new position 
+#	and direction for enemy is chosen and the counter is reset 
+#	to FPS * 3 (3 secs between teleports).
+#	This should be used in concert with enemy_draw_teleport() 
+#	which replaces enemy.draw() to achieve a flickering effect before transport.
+#	"""
+#	def inner(*args, **kwargs):
+#		obj.move()
+#		obj.shot_check()
+#		obj.counter -= 1
+#		if obj.counter % 5 or obj.counter in xrange((FPS / 2), (FPS * 2)):
+#			obj.visible = True
+#		else:
+#			obj.visible = False
+#		if obj.counter <= 0:
+#			shipX, shipY = [int(x) for x in ship.rect.center]
+#			safex = range(10, (shipX - 55)) + range((shipX + 55), (SCREENWIDTH - 10))
+#			safey = range(10, (shipY - 55)) + range((shipY + 55), (SCREENHEIGHT - 10))
+#			obj.x = random.choice(safex)
+#			obj.y = random.choice(safey)
+#			obj.direction = random.choice(DIR_VALS)
+#			obj.counter = FPS * 3
+#			teleportSound.play()
+#		if is_out_of_bounds(obj.rect.center):
+#			obj.bounce()
+#	obj.drawImg = GREENSHIPIMG
+#	obj.points = 200
+#	obj.speed -= 1
+#	return inner
+#
+#		
+#def enemy_boomer(self):
+#	"""Comes in from the borders and then blows up for big damages."""
+#	startX, startY = self.origin
+#	if abs(startX - self.x) >= SCREENWIDTH / 2 or abs(startY - self.y) >= SCREENHEIGHT / 2:
+#		self.speed = self.speed - 1 if self.speed > 0 else 0
+#		self.color = tuple([color+15 if color < 230 else 255 for color in self.color])
+#	if self.color == WHITE:
+#		shotx, shoty = self.rect.center
+#		for direction in DIR_VALS:
+#			badBullet = Bullet(shotx, shoty, direction)
+#			badBullet.speed = 7
+#			badBullet.range = 50
+#			badBullet.color = LIGHTRED
+#			badqueue.add(badBullet)
+#			allqueue.add(badBullet)
+#		if 'up' in self.direction:
+#			self.y = SCREENHEIGHT + 10
+#		if 'down' in self.direction:
+#			self.y = -10
+#		if 'left' in self.direction:
+#			self.x = SCREENWIDTH + 10
+#		if 'right' in self.direction:
+#			self.x = -10
+#			
+#		self.origin = (self.rect.center)
+#		self.color = YELLOW		#not-so-great with sprites.
+#		self.speed = 3
 
 
 class Scene(object):
@@ -794,6 +865,8 @@ class GameHandler(object):
 		difficulty, stage = divmod(levelCounter, 4)
 		Level = GameLoop(difficulty, stage)
 		while gameOn:
+			for k, v in Obvs.iteritems():
+				print "{}: {} obvs".format(k, len(v))
 			nextLevel = Level.play(difficulty, stage)
 			if nextLevel: 
 				levelCounter += 1	#use divmod() to determine next level's iteration and difficulty
@@ -884,67 +957,77 @@ class GameHandler(object):
 
 class GameLoop(object):
 	def __init__(self, difficulty, stage):
+		self.difficulty = difficulty
+		self.stage = stage
 		self.goodqueue = goodqueue
 		self.badqueue = badqueue
 		self.allqueue = allqueue
 		self.textqueue = pygame.sprite.Group()
-		self.enemiesInLevel = 3 + difficulty if not TESTING else 0
-		shipX, shipY = int(ship.x), int(ship.y) #need integers because range() only takes ints
-		possibleAI = {0:[False, False],
-					1:[False, False],
-					2:[sweep_strategy, sweep_strategy],
-					3:[sweep_strategy, sweep_strategy]} #the kinds of 'AI' the level can choose from.
-		kindsOfAI = possibleAI[stage]
-		if difficulty >= 1:
-			kindsOfAI.append(teleport_strategy)
-		if difficulty >= 3:
-			kindsOfAI.append(rammer_strategy)
-		for i in xrange(0, self.enemiesInLevel):
-			safex = range(10, (shipX - 25)) + range((shipX + 25), (SCREENWIDTH - 10))
-			safey = range(10, (shipY - 25)) + range((shipY + 25), (SCREENHEIGHT - 10))
-			enemy = Enemy(random.choice(safex), random.choice(safey))
-			newAI = random.choice((kindsOfAI))
-			#newAI = teleport_strategy
-			if newAI:
-				enemy.unique_action = newAI(enemy, enemy.unique_action)
-			variance = random.randint(0, difficulty)
-			enemy.speed = int(math.floor(enemy.speed * (1.05 ** variance)))
-			enemy.points = int(math.floor(enemy.points + ((enemy.points / 10) * variance)))
-			self.badqueue.add(enemy)
-			self.allqueue.add(enemy)
-
-	def play(self, difficulty, stage):
-		statsFont = pygame.font.Font('freesansbold.ttf', 18)
-		ptsFont = pygame.font.Font('freesansbold.ttf', 10)
-		gameoverFont = pygame.font.Font('freesansbold.ttf', 36)
+		self.enemies = 3 + difficulty if not TESTING else 0
+		self.score_font = pygame.font.Font('freesansbold.ttf', 18)
+		self.pts_font = pygame.font.Font('freesansbold.ttf', 10)
+		self.gameover_font = pygame.font.Font('freesansbold.ttf', 36)
+		self.score_text = TextObj(0, 0, 'Score:', WHITE, self.score_font)
+		self.score_num = TextObj(0, 0, ship.score, WHITE, self.score_font)
+		self.lives_text = TextObj(0, 0, 'Lives:', WHITE, self.score_font)
+		self.lives_num = TextObj(0, 0, ship.lives, WHITE, self.score_font)
+		self.level_text = TextObj(0, 0, 'Level %d - %d' % (difficulty + 1, stage + 1), WHITE, self.score_font)
+		self.gameover_text = TextObj(0, 0, 'G  A  M  E    O  V  E  R', GREEN, self.gameover_font)
+		self.prep()
 		
-		scoreText = TextObj(0, 0, 'Score:', WHITE, statsFont)
-		scoreText.pin_corner_to('topleft', (15, 15))
-		scoreNumText = TextObj(0, 0, ship.score, WHITE, statsFont)
-		scoreNumText.pin_corner_to('topleft', (scoreText.rect.topright[0] + 5, scoreText.rect.topright[1]))
+	def prep(self):
 		
-		livesText = TextObj(0, 0, 'Lives:', WHITE, statsFont)
-		livesText.pin_corner_to('topright', (SCREENWIDTH - (SCREENWIDTH / 19), 15))
-		livesNumText = TextObj(0, 0, ship.lives, WHITE, statsFont)
-		livesNumText.pin_corner_to('topleft', (livesText.rect.topright[0] + 5, livesText.rect.topright[1]))
-								
-		levelText = TextObj(0, 0, 'Level %d - %d' % (difficulty + 1, stage + 1), WHITE, statsFont)
-		levelText.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 20))
+		self.score_text.pin_corner_to('topleft', (15, 15))
+		self.score_num.pin_corner_to('topleft', (
+												self.score_text.rect.topright[0] + 5, 
+												self.score_text.rect.topright[1])
+												)
 		
-		self.textqueue.add(scoreText, scoreNumText, livesText, livesNumText, levelText)
+		self.lives_text.pin_corner_to('topright', (SCREENWIDTH - (SCREENWIDTH / 19), 15))
+		self.lives_num.pin_corner_to('topleft', (
+												self.lives_text.rect.topright[0] + 5, 
+												self.lives_text.rect.topright[1])
+												)
+		
+		
+		self.level_text.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 20))
+		self.gameover_text.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 2))
+		
+		
+		self.score_num.ship_set_score = self.score_num.set_text
+		self.score_num.sub('ship_set_score')
+		self.lives_num.ship_set_lives = self.lives_num.set_text
+		self.lives_num.sub('ship_set_lives')
+		
+		self.textqueue.add(self.score_text, self.score_num, self.lives_text, self.lives_num, self.level_text)
 		self.allqueue.add(PlayerMouse(*pygame.mouse.get_pos(), target=ship))
 		
-		gameoverText = TextObj(0, 0, 'G  A  M  E    O  V  E  R', GREEN, gameoverFont)
-		gameoverText.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 2))
-		
+		shipX, shipY = int(ship.x), int(ship.y) #need integers because range() only takes ints
+		possibleAI = {
+						0:[Enemy, Enemy],
+						1:[Enemy, Enemy],
+						2:[Sweeper, Sweeper],
+						3:[Sweeper, Sweeper]
+				}
+		kindsOfAI = possibleAI[self.stage]
+		if self.difficulty >= 1:
+			kindsOfAI.append(Teleporter)
+		if self.difficulty >= 3:
+			kindsOfAI.append(Rammer)
+		for i in xrange(0, self.enemies):
+			variance = random.randint(0, self.difficulty)
+			safex = range(10, (shipX - 25)) + range((shipX + 25), (SCREENWIDTH - 10))
+			safey = range(10, (shipY - 25)) + range((shipY + 25), (SCREENHEIGHT - 10))
+			NewEnemy = random.choice(kindsOfAI)(x=random.choice(safex), y=random.choice(safey))
+			NewEnemy.speed = int(math.floor(NewEnemy.speed * (1.05 ** variance)))
+			NewEnemy.points = int(math.floor(NewEnemy.points + ((NewEnemy.points / 10) * variance)))
+			self.badqueue.add(NewEnemy)
+			self.allqueue.add(NewEnemy)
+			
+
+	def play(self, difficulty, stage):
 		go_to_gameover = FPS * 3
 		paused = False
-		
-		scoreNumText.ship_set_score = scoreNumText.set_text
-		scoreNumText.sub('ship_set_score')
-		livesNumText.ship_set_lives = livesNumText.set_text
-		livesNumText.sub('ship_set_lives')
-		
 		if stage % 4 == 0 and difficulty > 0:
 			other_dirs = [d for d in DIR_VALS if d != STARFIELDBG.direction]
 			STARFIELDBG.direction = random.choice(other_dirs)
@@ -978,14 +1061,16 @@ class GameLoop(object):
 				text.draw()
 			if not ship.lives:
 				go_to_gameover -= 1
-				if gameoverText not in self.textqueue:
-					self.textqueue.add(gameoverText)
+				if self.gameover_text not in self.textqueue:
+					self.textqueue.add(self.gameover_text)
 			pygame.display.flip()
 			if go_to_gameover <= 0:		#return False to go to gameover
-				self.textqueue.empty()
+				for txt in self.textqueue:
+					txt.kill()
 				return False
 			if not self.badqueue and not TESTING:	#return True to generate new level
-				self.textqueue.empty()
+				for txt in self.textqueue:
+					txt.kill()
 				return True
 			FPSCLOCK.tick(FPS)
 
