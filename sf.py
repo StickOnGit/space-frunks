@@ -70,7 +70,7 @@ DIR_DIAGS = [UPLEFT, DOWNLEFT, UPRIGHT, DOWNRIGHT]
 DIR_VALS = [UP, DOWN, LEFT, RIGHT, UPLEFT, DOWNLEFT, UPRIGHT, DOWNRIGHT]
 
 STARTINGLEVEL = 0
-EARNEDEXTRAGUY = 8000
+EARNEDEXTRAGUY = 5000
 TESTING = False
 
 DISPLAYSURF = pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
@@ -276,15 +276,14 @@ class TextObj(ListenSprite):
 	def draw(self):
 		DISPLAYSURF.blit(self.to_blit, self.rect)
 		
-class RisingPoints(TextObj):
-	"""A TextObj that rises and self-terminates after its counter reaches 0."""
+class RiseText(TextObj):
+	"""A TextObj that rises and self-kills when its counter = 0."""
 	def __init__(self, x=0, y=0, text='_default_', color=LIGHTRED, font=pygame.font.Font('freesansbold.ttf', 10), counter=45, speed=1, direction=UP):
-		super(RisingPoints, self).__init__(x, y, text, color, font)
+		super(RiseText, self).__init__(x, y, text, color, font)
 		self.counter = counter
 		self.speed = speed
 		self.direction = direction
-		
-		
+
 	def update(self):
 		self.counter -= 1
 		self.move()
@@ -314,7 +313,6 @@ class MultiText(TextObj):
 			self.set_text(self.all_texts[next_text])
 			self.rect = self.find_rect()
 				
-			
 
 class Player(ListenSprite):
 	def __init__(self, x, y):
@@ -328,7 +326,7 @@ class Player(ListenSprite):
 		self.visible = True
 		self.lives = 3
 		self.score = 0
-		self.extra_guy_counter = 1
+		self.next_extra_guy = 1
 		
 	def __setattr__(self, k, v):
 		"""Auto-publishes message when listed items are updated.
@@ -374,9 +372,10 @@ class Player(ListenSprite):
 		self.cooldown -= 1 if self.cooldown > 0 else 0
 		self.respawn -= 1 if self.respawn > 0 else 0
 		self.visible = self.is_visible()
-		if self.score >= (EARNEDEXTRAGUY * self.extra_guy_counter):	#grants an extra life every X points
+		if self.score >= (EARNEDEXTRAGUY * self.next_extra_guy):	#grants an extra life every X points
 			self.lives += 1
-			self.extra_guy_counter += 1
+			self.next_extra_guy += 1
+			self.pub('made_object', self, RiseText, x=self.x, y=self.y, color=(50, 200, 50), text='1UP')
 			
 	def set_direction(self, target):
 		self.direction = [i / abs(i) if i != 0 else 0 for i in (target[0] - self.x, target[1] - self.y)]
@@ -487,14 +486,13 @@ class Enemy(ListenSprite):
 		Replace this with new logic to change enemy behavior.
 		Default action is self.counter += 1 until > self.range, then reverse.
 		"""
-		self.move_to_target(self.target)
-		self.shot_check()
 		if self.counter >= self.range or is_out_of_bounds(self.rect.center) or self.rect.center == self.target:
 			self.counter = 0
 			self.bounce()
 			self.set_target_with_distance(self.range)
-		else:
-			self.counter += self.speed
+		self.move_to_target(self.target)
+		self.counter += self.speed
+		self.shot_check()
 		
 	def bounce(self):
 		self.direction = [-i for i in self.direction]
@@ -504,7 +502,7 @@ class Enemy(ListenSprite):
 		or some other effect.
 		"""
 		self.pub('made_object', self, Explosion, x=self.x, y=self.y)
-		self.pub('made_object', self, RisingPoints, x=self.x, y=self.y, text=self.points)
+		self.pub('made_object', self, RiseText, x=self.x, y=self.y, text=self.points)
 		enemyDeadSound.play()
 		self.kill()
 
@@ -546,7 +544,7 @@ class Sweeper(Enemy):
 class Rammer(Enemy):
 	def __init__(self, x, y):
 		super(Rammer, self).__init__(x, y)
-		self.speed -= 1
+		self.speed = 3
 		self.points = 300
 		
 	def unique_action(self):
@@ -555,6 +553,7 @@ class Rammer(Enemy):
 class Teleporter(Enemy):
 	def __init__(self, x, y, img=GREENSHIPIMG, leftlane=(15, 40), rightlane=(SCREENWIDTH-40, SCREENWIDTH-15), uplane=(15, 40), downlane=(SCREENHEIGHT-40, SCREENHEIGHT-15)):
 		super(Teleporter, self).__init__(x, y, img=img)
+		self.speed = 2
 		self.points = 200
 		self.leftlane = range(leftlane[0], leftlane[1])
 		self.rightlane = range(rightlane[0], rightlane[1])
@@ -582,16 +581,18 @@ class Teleporter(Enemy):
 			else:
 				self.y = random.choice(self.ylane)
 				self.x = random.choice(self.widex)
-			new_dir = DIR_VALS[:]
+			picks = (-1, 0, 1)
+			badx, bady = (0, 0)
 			if self.x in self.leftlane:
-				new_dir = [d for d in new_dir if d[0] >= 0]
+				badx = -1
 			elif self.x in self.rightlane:
-				new_dir = [d for d in new_dir if d[0] <= 0]
+				badx = 1
 			if self.y in self.uplane:
-				new_dir = [d for d in new_dir if d[1] >= 0]
+				bady = -1
 			elif self.y in self.downlane:
-				new_dir = [d for d in new_dir if d[1] <= 0]
-			self.direction = random.choice(new_dir)
+				bady = 1
+			new_dirs =[[x, y] for x in picks if x != badx for y in picks if y != bady]
+			self.direction = random.choice(new_dirs)
 			self.counter = FPS * 3
 			teleportSound.play()
 
@@ -648,13 +649,7 @@ class ObjLoader(object):
 		new_obj = objtype(**kwargs)
 		allqueue.add(new_obj)
 
-#eventually put this in a better place
-ship = Player(SCREENWIDTH / 2, SCREENHEIGHT / 2)
-goodqueue = pygame.sprite.Group()
-badqueue = pygame.sprite.Group()
-allqueue = pygame.sprite.Group()
 
-Loader = ObjLoader() ##set and forget this guy :)
 
 class Starfield(object):
 	"""A starfield background. 
@@ -707,69 +702,18 @@ class Starfield(object):
 			if not -1 < star[1] < SCREENHEIGHT + 1:
 				star[0] = random.randrange(0, SCREENWIDTH)
 				star[1] = SCREENHEIGHT + speed if star[1] <= 0 else 0 - speed
-	 
-		
-			
-STARFIELDBG = Starfield()
 
-#alternative patterns of movement for Enemy() added via strategy patterns, thanks AC
+
 ###
-#def sweep_strategy(obj, func):
-#	def inner(*args, **kwargs):
-#		obj.move()
-#		obj.shot_check()
-#		if not -30 < obj.x < SCREENWIDTH + 30:
-#			obj.y = random.randrange(25, (SCREENHEIGHT - 25))
-#			obj.x = SCREENWIDTH + 20 if obj.x <= 0 else -20
-#		if not -30 < obj.y < SCREENHEIGHT + 30:
-#			obj.x = random.randrange(25, (SCREENWIDTH - 25))
-#			obj.y = SCREENHEIGHT + 20 if obj.y <= 0 else -20
-#	return inner
-#	
-#def rammer_strategy(obj, func):
-#	"""Compares its x and y coordinates against the target and moves toward it.
-#	If the ship is respawning, the target is its own x and y of origin. 
-#	If the ship is NOT respawning, the ship is of course the target.
-#	"""
-#	def inner(*args, **kwargs):
-#		obj.move_to_target(obj.origin if ship.respawn else ship.rect.center)
-#	obj.speed -= 1
-#	obj.points = 300
-#	return inner
-#		
-#def teleport_strategy(obj, func):
-#	"""This replaces unique_action.
-#	When enemy.counter reaches 0 (or less), a new position 
-#	and direction for enemy is chosen and the counter is reset 
-#	to FPS * 3 (3 secs between teleports).
-#	This should be used in concert with enemy_draw_teleport() 
-#	which replaces enemy.draw() to achieve a flickering effect before transport.
-#	"""
-#	def inner(*args, **kwargs):
-#		obj.move()
-#		obj.shot_check()
-#		obj.counter -= 1
-#		if obj.counter % 5 or obj.counter in xrange((FPS / 2), (FPS * 2)):
-#			obj.visible = True
-#		else:
-#			obj.visible = False
-#		if obj.counter <= 0:
-#			shipX, shipY = [int(x) for x in ship.rect.center]
-#			safex = range(10, (shipX - 55)) + range((shipX + 55), (SCREENWIDTH - 10))
-#			safey = range(10, (shipY - 55)) + range((shipY + 55), (SCREENHEIGHT - 10))
-#			obj.x = random.choice(safex)
-#			obj.y = random.choice(safey)
-#			obj.direction = random.choice(DIR_VALS)
-#			obj.counter = FPS * 3
-#			teleportSound.play()
-#		if is_out_of_bounds(obj.rect.center):
-#			obj.bounce()
-#	obj.drawImg = GREENSHIPIMG
-#	obj.points = 200
-#	obj.speed -= 1
-#	return inner
-#
-#		
+#instantiate things that are (for now) global
+#this needs to be refactored
+ship = Player(SCREENWIDTH / 2, SCREENHEIGHT / 2)
+goodqueue = pygame.sprite.Group()
+badqueue = pygame.sprite.Group()
+allqueue = pygame.sprite.Group()
+Loader = ObjLoader() ##set and forget this guy :)	 
+BGStars = Starfield()
+		
 #def enemy_boomer(self):
 #	"""Comes in from the borders and then blows up for big damages."""
 #	startX, startY = self.origin
@@ -836,7 +780,7 @@ class GameHandler(object):
 		waiting = True
 		while waiting:
 			DISPLAYSURF.fill(BLACK)
-			STARFIELDBG.update()
+			BGStars.update()
 			for word in introqueue:
 				word.draw()
 			for event in pygame.event.get():
@@ -895,7 +839,7 @@ class GameHandler(object):
 		pygame.mixer.music.play(-1)
 		while displayScores:
 			DISPLAYSURF.fill(BLACK)
-			STARFIELDBG.update()
+			BGStars.update()
 			for event in pygame.event.get():
 				if event.type == pygame.QUIT:
 					pygame.quit()
@@ -989,10 +933,8 @@ class GameLoop(object):
 												self.lives_text.rect.topright[1])
 												)
 		
-		
 		self.level_text.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 20))
 		self.gameover_text.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 2))
-		
 		
 		self.score_num.ship_set_score = self.score_num.set_text
 		self.score_num.sub('ship_set_score')
@@ -1029,8 +971,8 @@ class GameLoop(object):
 		go_to_gameover = FPS * 3
 		paused = False
 		if stage % 4 == 0 and difficulty > 0:
-			other_dirs = [d for d in DIR_VALS if d != STARFIELDBG.direction]
-			STARFIELDBG.direction = random.choice(other_dirs)
+			other_dirs = [d for d in DIR_VALS if d != BGStars.direction]
+			BGStars.direction = random.choice(other_dirs)
 		
 		while True:
 			for event in pygame.event.get(): #get player events and pass them to the ship's event handler
@@ -1052,9 +994,8 @@ class GameLoop(object):
 								ship.score += baddie.points
 					goodguy.got_hit()
 			
-			
 			DISPLAYSURF.fill(BLACK)
-			STARFIELDBG.update()
+			BGStars.update()
 			for obj in self.allqueue:
 				obj.draw()
 			for text in self.textqueue:
@@ -1064,14 +1005,10 @@ class GameLoop(object):
 				if self.gameover_text not in self.textqueue:
 					self.textqueue.add(self.gameover_text)
 			pygame.display.flip()
-			if go_to_gameover <= 0:		#return False to go to gameover
-				for txt in self.textqueue:
+			if not self.badqueue or go_to_gameover <= 0:	#return True to generate new level
+				for txt in self.textqueue:					#return False for game over
 					txt.kill()
-				return False
-			if not self.badqueue and not TESTING:	#return True to generate new level
-				for txt in self.textqueue:
-					txt.kill()
-				return True
+				return True if not self.badqueue else False
 			FPSCLOCK.tick(FPS)
 
 
