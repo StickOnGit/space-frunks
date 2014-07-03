@@ -544,7 +544,7 @@ class Sweeper(Enemy):
 class Rammer(Enemy):
 	def __init__(self, x, y):
 		super(Rammer, self).__init__(x, y)
-		self.speed = 3
+		self.speed = 2
 		self.points = 300
 		
 	def unique_action(self):
@@ -779,10 +779,6 @@ class GameHandler(object):
 		introqueue.add(titleObj, menuObj)
 		waiting = True
 		while waiting:
-			DISPLAYSURF.fill(BLACK)
-			BGStars.update()
-			for word in introqueue:
-				word.draw()
 			for event in pygame.event.get():
 				if event.type == pygame.QUIT:
 					pygame.quit()
@@ -794,6 +790,10 @@ class GameHandler(object):
 					allqueue.add(ship)
 					waiting = False
 			introqueue.update()
+			DISPLAYSURF.fill(BLACK)
+			BGStars.update()
+			for word in introqueue:
+				word.draw()
 			pygame.display.flip()
 			FPSCLOCK.tick(FPS)
 
@@ -804,20 +804,15 @@ class GameHandler(object):
 		Negative values are useless, since the game cycles through 
 		to the first level with a nonzero number of badguys.
 		"""
-		gameOn = True
-		levelCounter = STARTINGLEVEL
-		difficulty, stage = divmod(levelCounter, 4)
-		Level = GameLoop(difficulty, stage)
-		while gameOn:
-			for k, v in Obvs.iteritems():
-				print "{}: {} obvs".format(k, len(v))
-			nextLevel = Level.play(difficulty, stage)
-			if nextLevel: 
-				levelCounter += 1	#use divmod() to determine next level's iteration and difficulty
-				difficulty, stage = divmod(levelCounter, 4)
-				Level = GameLoop(difficulty, stage)
+		game_on = True
+		lvl = STARTINGLEVEL
+		while game_on:
+			Level = LevelObj(lvl)
+			next_lvl = Level.play()
+			if next_lvl: 
+				lvl += 1
 			else:
-				gameOn = False
+				game_on = False
 
 	def game_over_loop(self):
 		"""Gets initials if you earned a hi-score. Displays scores."""
@@ -838,8 +833,6 @@ class GameHandler(object):
 		pygame.mixer.music.load(path.join('sounds', 'gameover.wav'))
 		pygame.mixer.music.play(-1)
 		while displayScores:
-			DISPLAYSURF.fill(BLACK)
-			BGStars.update()
 			for event in pygame.event.get():
 				if event.type == pygame.QUIT:
 					pygame.quit()
@@ -887,6 +880,9 @@ class GameHandler(object):
 						topScores.add(initialText, hiscoreText)
 						totalScores += 1
 					scoremaking = False
+					
+			DISPLAYSURF.fill(BLACK)
+			BGStars.update()
 			for score in topScores:
 				score.draw()
 			pygame.display.flip()
@@ -899,15 +895,17 @@ class GameHandler(object):
 			self.level_loop()
 			self.game_over_loop()
 
-class GameLoop(object):
-	def __init__(self, difficulty, stage):
-		self.difficulty = difficulty
-		self.stage = stage
+class LevelObj(object):
+	#def __init__(self, difficulty, stage):
+	def __init__(self, level_num):
+		#self.world = difficulty
+		#self.stage = stage
+		self.world, self.stage = divmod(level_num, 4)
 		self.goodqueue = goodqueue
 		self.badqueue = badqueue
 		self.allqueue = allqueue
 		self.textqueue = pygame.sprite.Group()
-		self.enemies = 3 + difficulty if not TESTING else 0
+		self.enemies = 3 + self.world if not TESTING else 0
 		self.score_font = pygame.font.Font('freesansbold.ttf', 18)
 		self.pts_font = pygame.font.Font('freesansbold.ttf', 10)
 		self.gameover_font = pygame.font.Font('freesansbold.ttf', 36)
@@ -915,7 +913,7 @@ class GameLoop(object):
 		self.score_num = TextObj(0, 0, ship.score, WHITE, self.score_font)
 		self.lives_text = TextObj(0, 0, 'Lives:', WHITE, self.score_font)
 		self.lives_num = TextObj(0, 0, ship.lives, WHITE, self.score_font)
-		self.level_text = TextObj(0, 0, 'Level %d - %d' % (difficulty + 1, stage + 1), WHITE, self.score_font)
+		self.level_text = TextObj(0, 0, 'Level %d - %d' % (self.world + 1, self.stage + 1), WHITE, self.score_font)
 		self.gameover_text = TextObj(0, 0, 'G  A  M  E    O  V  E  R', GREEN, self.gameover_font)
 		self.prep()
 		
@@ -952,12 +950,12 @@ class GameLoop(object):
 						3:[Sweeper, Sweeper]
 				}
 		kindsOfAI = possibleAI[self.stage]
-		if self.difficulty >= 1:
+		if self.world >= 1:
 			kindsOfAI.append(Teleporter)
-		if self.difficulty >= 3:
+		if self.world >= 3:
 			kindsOfAI.append(Rammer)
 		for i in xrange(0, self.enemies):
-			variance = random.randint(0, self.difficulty)
+			variance = random.randint(0, self.world)
 			safex = range(10, (shipX - 25)) + range((shipX + 25), (SCREENWIDTH - 10))
 			safey = range(10, (shipY - 25)) + range((shipY + 25), (SCREENHEIGHT - 10))
 			NewEnemy = random.choice(kindsOfAI)(x=random.choice(safex), y=random.choice(safey))
@@ -967,10 +965,11 @@ class GameLoop(object):
 			self.allqueue.add(NewEnemy)
 			
 
-	def play(self, difficulty, stage):
+	#def play(self, difficulty, stage):
+	def play(self):
 		go_to_gameover = FPS * 3
 		paused = False
-		if stage % 4 == 0 and difficulty > 0:
+		if self.stage % 4 == 0 and self.world > 0:
 			other_dirs = [d for d in DIR_VALS if d != BGStars.direction]
 			BGStars.direction = random.choice(other_dirs)
 		
@@ -993,6 +992,10 @@ class GameLoop(object):
 							if baddie not in self.badqueue and baddie.points:
 								ship.score += baddie.points
 					goodguy.got_hit()
+				if not self.badqueue or go_to_gameover <= 0:	#return True to generate new level
+					for txt in self.textqueue:					#return False for game over
+						txt.kill()
+					return True if not self.badqueue else False
 			
 			DISPLAYSURF.fill(BLACK)
 			BGStars.update()
@@ -1005,10 +1008,6 @@ class GameLoop(object):
 				if self.gameover_text not in self.textqueue:
 					self.textqueue.add(self.gameover_text)
 			pygame.display.flip()
-			if not self.badqueue or go_to_gameover <= 0:	#return True to generate new level
-				for txt in self.textqueue:					#return False for game over
-					txt.kill()
-				return True if not self.badqueue else False
 			FPSCLOCK.tick(FPS)
 
 
