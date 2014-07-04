@@ -65,9 +65,10 @@ KEY_VAL = {
 			pygame.K_KP9: UPRIGHT,
 			pygame.K_KP3: DOWNRIGHT
 		}
-		
-DIR_DIAGS = [UPLEFT, DOWNLEFT, UPRIGHT, DOWNRIGHT]
+
 DIR_VALS = [UP, DOWN, LEFT, RIGHT, UPLEFT, DOWNLEFT, UPRIGHT, DOWNRIGHT]
+DIR_DIAGS = [i for i in DIR_VALS if 0 not in i]
+DIR_CROSS = [i for i in DIR_VALS if 0 in i]
 
 STARTINGLEVEL = 0
 EARNEDEXTRAGUY = 5000
@@ -158,7 +159,7 @@ class ListenSprite(pygame.sprite.Sprite):
 			
 	def set_direction(self, target):
 		self.direction = [i / abs(i) if i != 0 else 0 for i in (target[0] - self.x, target[1] - self.y)]
-		if not [i for i in self.direction if i != 0]:
+		if not 0 in self.direction:
 			self.direction = [i * PT_SEVEN for i in self.direction]
 			
 	def set_target_with_distance(self, distance):
@@ -187,7 +188,6 @@ class ListenSprite(pygame.sprite.Sprite):
 		centers it on the current rect, and then replaces
 		the current rect.
 		"""
-		#new_rect = self.drawImg.get_bounding_rect()
 		new_rect = self.get_shown_image().get_bounding_rect()
 		new_rect.center = self.rect.center
 		self.rect = new_rect
@@ -199,7 +199,6 @@ class ListenSprite(pygame.sprite.Sprite):
 		if self.visible:
 			shownImg = self.get_shown_image()
 			DISPLAYSURF.blit(shownImg, shownImg.get_rect(center=self.rect.center))
-		#pygame.draw.rect(DISPLAYSURF, WHITE, self.rect, 1)
 
 	def sub(self, message):
 		add_observer(self, message)
@@ -233,14 +232,6 @@ class Explosion(ListenSprite):
 			self.resize_rect()
 		else:
 			self.kill()
-		
-"""		
-def make_explosion(obj, func):
-	def inner(*args, **kwargs):
-		allqueue.add(Explosion(obj.x, obj.y))
-		return func(*args, **kwargs)
-	return inner
-"""
 	
 class TextObj(ListenSprite):
 	def __init__(self, x=0, y=0, text='_default_', color=RED, font=GAMEFONT):
@@ -249,11 +240,13 @@ class TextObj(ListenSprite):
 		self.color = color
 		self.font = font
 		self.pinned = False
+		self.pinned_to = (None, None)
 		self.to_blit = self.set_to_blit()
 		self.rect = self.find_rect()
 		
 	def pin_corner_to(self, corner, coordinates):
-		self.pinned = (corner, coordinates)
+		self.pinned = True
+		self.pinned_to = (corner, coordinates)
 		self.rect = self.find_rect()
 	
 	def set_text(self, text):
@@ -270,7 +263,7 @@ class TextObj(ListenSprite):
 	def find_rect(self): 
 		new_rect = self.to_blit.get_rect(center=(self.x, self.y))
 		if self.pinned:
-			setattr(new_rect, self.pinned[0], self.pinned[1])
+			setattr(new_rect, self.pinned_to[0], self.pinned_to[1])
 		return new_rect
 
 	def draw(self):
@@ -372,15 +365,10 @@ class Player(ListenSprite):
 		self.cooldown -= 1 if self.cooldown > 0 else 0
 		self.respawn -= 1 if self.respawn > 0 else 0
 		self.visible = self.is_visible()
-		if self.score >= (EARNEDEXTRAGUY * self.next_extra_guy):	#grants an extra life every X points
+		if self.score >= (EARNEDEXTRAGUY * self.next_extra_guy):
 			self.lives += 1
 			self.next_extra_guy += 1
 			self.pub('made_object', self, RiseText, x=self.x, y=self.y, color=(50, 200, 50), text='1UP')
-			
-	def set_direction(self, target):
-		self.direction = [i / abs(i) if i != 0 else 0 for i in (target[0] - self.x, target[1] - self.y)]
-		if self.direction[0] != 0 and self.direction[1] != 0:
-			self.direction = [i * PT_SEVEN for i in self.direction]
 
 	def got_hit(self):
 		"""Hook for controller's got_hit() call. 
@@ -896,10 +884,7 @@ class GameHandler(object):
 			self.game_over_loop()
 
 class LevelObj(object):
-	#def __init__(self, difficulty, stage):
 	def __init__(self, level_num):
-		#self.world = difficulty
-		#self.stage = stage
 		self.world, self.stage = divmod(level_num, 4)
 		self.goodqueue = goodqueue
 		self.badqueue = badqueue
@@ -918,7 +903,6 @@ class LevelObj(object):
 		self.prep()
 		
 	def prep(self):
-		
 		self.score_text.pin_corner_to('topleft', (15, 15))
 		self.score_num.pin_corner_to('topleft', (
 												self.score_text.rect.topright[0] + 5, 
@@ -965,7 +949,6 @@ class LevelObj(object):
 			self.allqueue.add(NewEnemy)
 			
 
-	#def play(self, difficulty, stage):
 	def play(self):
 		go_to_gameover = FPS * 3
 		paused = False
@@ -979,9 +962,10 @@ class LevelObj(object):
 					pygame.quit()
 					sys.exit()
 				elif event.type == pygame.KEYDOWN:
-					ship.handle_key(event.key)
 					if event.key == pygame.K_p:
 						paused = False if paused else True
+					else:
+						ship.handle_key(event.key)
 			if not paused:
 				self.allqueue.update()
 				hit_list = pygame.sprite.groupcollide(self.goodqueue, self.badqueue, False, False)
@@ -992,6 +976,10 @@ class LevelObj(object):
 							if baddie not in self.badqueue and baddie.points:
 								ship.score += baddie.points
 					goodguy.got_hit()
+				if not ship.lives:
+					go_to_gameover -= 1
+					if self.gameover_text not in self.textqueue:
+						self.textqueue.add(self.gameover_text)
 				if not self.badqueue or go_to_gameover <= 0:	#return True to generate new level
 					for txt in self.textqueue:					#return False for game over
 						txt.kill()
@@ -1003,10 +991,10 @@ class LevelObj(object):
 				obj.draw()
 			for text in self.textqueue:
 				text.draw()
-			if not ship.lives:
-				go_to_gameover -= 1
-				if self.gameover_text not in self.textqueue:
-					self.textqueue.add(self.gameover_text)
+			#if not ship.lives:
+			#	go_to_gameover -= 1
+			#	if self.gameover_text not in self.textqueue:
+			#		self.textqueue.add(self.gameover_text)
 			pygame.display.flip()
 			FPSCLOCK.tick(FPS)
 
