@@ -79,10 +79,8 @@ pygame.display.set_caption('Space Frunks')
 pygame.mouse.set_visible(0)
 
 try:	#either load hi-score list, or create a default list
-	f = open('scores.py', 'r')
-	rawScoreList = f.read()
-	scoreList = pickle.loads(rawScoreList)
-	f.close()
+	with open('scores.py', 'r') as f:
+		scoreList = pickle.loads(f.read())
 except:
 	scoreList = [
 					['NME', 15000], 
@@ -111,9 +109,7 @@ def is_out_of_bounds(objXY, offset=15, w=SCREENWIDTH, h=SCREENHEIGHT):
 	off the screen. Can be optionally passed an 'offset' to alter just how 
 	far off the screen an object can live.
 	"""
-	if (w + offset) > objXY[0] > (offset * -1) and (h + offset) > objXY[1] > (offset * -1):
-		return False
-	else: return True
+	return not ((w + offset) > objXY[0] > (offset * -1) and (h + offset) > objXY[1] > (offset * -1))
 
 #loads sounds(but not music... it's handled differently)
 enemyDeadSound = load_sound('sounds', 'enemydead.wav')
@@ -139,14 +135,15 @@ BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR]
 
 
 class ListenSprite(pygame.sprite.Sprite):
-	def __init__(self, x=1, y=1):
+	def __init__(self, x=1, y=1, img=PLAYERSHIPIMG):
 		super(ListenSprite, self).__init__()
-		self.rect = pygame.Rect(x,y,1,1)
+		self.img = img
+		self.drawImg = img
+		self.rect = self.img.get_rect(center=(x, y))
 		self.x = self.rect.center[0]
 		self.y = self.rect.center[1]
 		self.direction = [0, 0]
 		self.target = [0, 0]
-		self.counter = 0
 		self.speed = 0
 		self.visible = True
 
@@ -215,12 +212,11 @@ class ListenSprite(pygame.sprite.Sprite):
 
 
 class Explosion(ListenSprite):
-	def __init__(self, x, y, rate=3):
-		super(Explosion, self).__init__(x, y)
-		self.imgs = BOOMLIST
+	def __init__(self, x, y, imgs=BOOMLIST, rate=3):
+		super(Explosion, self).__init__(x, y, img=imgs[0])
+		self.imgs = imgs
 		self.counter = 0
 		self.rate = rate
-		self.drawImg = self.imgs[0]
 		self.rect = self.drawImg.get_rect(center=(self.x, self.y))
 		self.direction = random.choice(DIR_VALS)
 		
@@ -240,7 +236,7 @@ class TextObj(ListenSprite):
 		self.color = color
 		self.font = font
 		self.pinned = False
-		self.pinned_to = (None, None)
+		self.pinned_to = ('center', self.rect.center)
 		self.to_blit = self.set_to_blit()
 		self.rect = self.find_rect()
 		
@@ -267,7 +263,8 @@ class TextObj(ListenSprite):
 		return new_rect
 
 	def draw(self):
-		DISPLAYSURF.blit(self.to_blit, self.rect)
+		if self.visible:
+			DISPLAYSURF.blit(self.to_blit, self.rect)
 		
 class RiseText(TextObj):
 	"""A TextObj that rises and self-kills when its counter = 0."""
@@ -310,10 +307,7 @@ class MultiText(TextObj):
 class Player(ListenSprite):
 	def __init__(self, x, y):
 		super(Player, self).__init__(x, y)
-		self.img = PLAYERSHIPIMG
-		self.drawImg = self.img
 		self.speed = 4
-		self.rect = self.img.get_rect(center=(self.x, self.y))
 		self.cooldown = 0
 		self.respawn = 0
 		self.visible = True
@@ -400,10 +394,8 @@ class Player(ListenSprite):
 			
 class ShipPiece(ListenSprite):
 	def __init__(self, x, y, img_piece, direction):
-		super(ShipPiece, self).__init__(x, y)
-		self.drawImg = img_piece
+		super(ShipPiece, self).__init__(x, y, img=img_piece)
 		self.direction = direction
-		self.rect = img_piece.get_rect(center=(self.x, self.y))
 		self.speed = 1
 		self.counter = FPS * 0.75
 	
@@ -420,12 +412,12 @@ class ShipPiece(ListenSprite):
 
 			
 class PlayerMouse(ListenSprite):
-	def __init__(self, x, y, target, size=9):
+	def __init__(self, x, y, bound_to, size=9):
 		super(PlayerMouse, self).__init__(x, y)
 		self.size = size
 		self.color = self.set_color()
 		self.rect = self.set_rect()
-		self.target = target
+		self.bound_to = bound_to
 		
 	def set_color(self):
 		return (random.randrange(60, 220), random.randrange(60, 220), random.randrange(60, 220))
@@ -441,22 +433,18 @@ class PlayerMouse(ListenSprite):
 		self.rect = self.set_rect()
 		
 	def draw(self):
-		if self.target.visible and not self.rect.colliderect(self.target.rect):
+		if self.bound_to.visible and not self.rect.colliderect(self.bound_to.rect):
 			pygame.draw.rect(DISPLAYSURF, self.color, self.rect, 1)
 
 
 class Enemy(ListenSprite):
 	def __init__(self, x, y, dirs=DIR_VALS, img=REDSHIPIMG):
-		super(Enemy, self).__init__(x, y)
-		self.img = img
-		self.drawImg = self.img
+		super(Enemy, self).__init__(x, y, img=img)
 		self.shotrate = 20
 		self.origin = (x, y)
 		self.range = random.randrange(60, 120)
 		self.counter = random.randrange(0, self.range)
 		self.direction = random.choice(dirs)
-		self.set_target_with_distance(self.range - self.counter)
-		self.rect = self.drawImg.get_rect(center=(self.x, self.y))
 		self.speed = 3
 		self.cooldown = FPS / 2
 		self.points = 100
@@ -472,15 +460,8 @@ class Enemy(ListenSprite):
 	def unique_action(self):
 		"""A hook for new movements. 
 		Replace this with new logic to change enemy behavior.
-		Default action is self.counter += 1 until > self.range, then reverse.
 		"""
-		if self.counter >= self.range or is_out_of_bounds(self.rect.center) or self.rect.center == self.target:
-			self.counter = 0
-			self.bounce()
-			self.set_target_with_distance(self.range)
-		self.move_to_target(self.target)
-		self.counter += self.speed
-		self.shot_check()
+		raise NotImplementedError
 		
 	def bounce(self):
 		self.direction = [-i for i in self.direction]
@@ -506,10 +487,30 @@ class Enemy(ListenSprite):
 		"""Fires a shot in a random direction."""
 		self.pub(
 					'made_like_object', self, Bullet, x=self.x, y=self.y, 
-					direction=random.choice(DIR_VALS), drawImg=BADGUYSHOT, speed=4
+					direction=random.choice(DIR_VALS), img=BADGUYSHOT, speed=4
 			)
 		self.cooldown = FPS / 2
 		enemyShotSound.play()
+		
+class Scooter(Enemy):
+	def __init__(self, x, y):
+		super(Scooter, self).__init__(x, y)
+		self.set_target_with_distance(self.range - self.counter)
+		
+		
+	def unique_action(self):
+		"""A hook for new movements. 
+		Replace this with new logic to change enemy behavior.
+		Default action is self.counter += 1 until > self.range, then reverse.
+		"""
+		if self.counter >= self.range or is_out_of_bounds(self.rect.center) or self.rect.center == self.target:
+			self.counter = 0
+			self.bounce()
+			self.set_target_with_distance(self.range)
+		self.move_to_target(self.target)
+		self.counter += self.speed
+		self.shot_check()
+		
 		
 class Sweeper(Enemy):
 	def __init__(self, x, y, img=GREENSHIPIMG, max_x=SCREENWIDTH+30, max_y=SCREENHEIGHT+30):
@@ -579,20 +580,18 @@ class Teleporter(Enemy):
 				bady = -1
 			elif self.y in self.downlane:
 				bady = 1
-			new_dirs =[[x, y] for x in picks if x != badx for y in picks if y != bady]
+			new_dirs =[[x, y] for x in picks if x != badx for y in picks if y != bady if [x, y] != [0, 0]]
 			self.direction = random.choice(new_dirs)
 			self.counter = FPS * 3
 			teleportSound.play()
 
 class Bullet(ListenSprite):
 	"""Bullet object. When it hits things, they blows up."""
-	def __init__(self, x, y, direction, drawImg=GOODGUYSHOT, speed=10):
-		super(Bullet, self).__init__(x, y)
+	def __init__(self, x, y, direction, img=GOODGUYSHOT, speed=10):
+		super(Bullet, self).__init__(x, y, img=img)
 		self.direction = direction
 		self.range = SCREENDIAG + 20
 		self.counter = 0
-		self.drawImg = drawImg
-		self.rect = self.drawImg.get_rect(center=(self.x, self.y))
 		self.resize_rect()
 		self.speed = speed
 		self.points = 0
@@ -758,25 +757,28 @@ class GameHandler(object):
 		
 		titleFont = pygame.font.Font('freesansbold.ttf', 32)
 		titleObj = TextObj(10, 10, 'Space Frunks', GREEN, titleFont)
-		titleObj.pin_corner_to('center', (SCREENWIDTH / 2, (SCREENHEIGHT / 2) - 100))
 		
 		menu_list = ['Press any key to play', 'Mouse moves ship', '10-keypad fires in 8 directions']
-		menuObj = MultiText(all_texts=menu_list, color=GREEN, font=pygame.font.Font('freesansbold.ttf', 18), switch=(FPS * 1.15))
+		menuObj = MultiText(all_texts=menu_list, color=GREEN, 
+							font=pygame.font.Font('freesansbold.ttf', 18), 
+							switch=(FPS * 1.15)
+						)
+		
+		titleObj.pin_corner_to('center', (SCREENWIDTH / 2, (SCREENHEIGHT / 2) - 100))
 		menuObj.pin_corner_to('center', (SCREENWIDTH / 2, (SCREENHEIGHT / 2) + 100))
 
 		introqueue.add(titleObj, menuObj)
-		waiting = True
-		while waiting:
+		intro_state = 'waiting'
+		while intro_state == 'waiting':
 			for event in pygame.event.get():
 				if event.type == pygame.QUIT:
-					pygame.quit()
-					sys.exit()
+					return 'quitgame'
 				elif event.type == pygame.KEYDOWN: #prepare for new game
 					pygame.mouse.set_pos([SCREENWIDTH / 2, SCREENHEIGHT / 2])
 					ship.ready_new_game(SCREENWIDTH / 2, SCREENHEIGHT / 2)
 					goodqueue.add(ship)
 					allqueue.add(ship)
-					waiting = False
+					intro_state = 'exit'
 			introqueue.update()
 			DISPLAYSURF.fill(BLACK)
 			BGStars.update()
@@ -788,91 +790,81 @@ class GameHandler(object):
 	def level_loop(self):
 		"""Determines the difficulty of the next level, 
 		and whether or not the game has ended or progressed.
-		As levelCounter increments, so too does the stage and difficulty.
+		As lvl increments, so too does the stage and difficulty.
 		Negative values are useless, since the game cycles through 
 		to the first level with a nonzero number of badguys.
 		"""
-		game_on = True
 		lvl = STARTINGLEVEL
-		while game_on:
+		lvl_state = 'game_on'
+		while lvl_state == 'game_on':
 			Level = LevelObj(lvl)
 			next_lvl = Level.play()
+			if next_lvl == 'quitgame':
+				return 'quitgame'
 			if next_lvl: 
 				lvl += 1
 			else:
-				game_on = False
+				lvl_state = 'exit'
 
 	def game_over_loop(self):
 		"""Gets initials if you earned a hi-score. Displays scores."""
-		playerInitials = TextObj(0, 0, '', WHITE, GAMEFONT)
-		playerInitials.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 2))
-		congratsText = TextObj(0, 0, 'High score!  Enter your name, frunk destroyer.', GREEN, GAMEFONT)
-		congratsText.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 10))
-		topScores = pygame.sprite.Group()
 		pygame.event.get()					#get() empties event queue
 		for thing in allqueue:
 			thing.kill()
 		allqueue.empty()
-		collectScore = False
-		scoremaking = True
-		if ship.score > scoreList[-1][1]:	#if ship.score is high enough, collectScore is set to True
-			collectScore = True
-		displayScores = True
+		
+		playerInitials = TextObj(0, 0, '', WHITE, GAMEFONT)
+		playerInitials.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 2))
+		congratsText = TextObj(0, 0, 'High score!  Enter your name, frunk destroyer.', GREEN, GAMEFONT)
+		congratsText.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 10))
+		
+		get_score_queue = pygame.sprite.Group()
+		get_score_queue.add(playerInitials, congratsText)
+		
+		#if score is higher than the last entry, get it. else, build hi score list
 		pygame.mixer.music.load(path.join('sounds', 'gameover.wav'))
 		pygame.mixer.music.play(-1)
-		while displayScores:
+		
+		go_state = 'get_score' if ship.score > scoreList[-1][1] else 'build_scores'
+		while go_state is not 'exit':
 			for event in pygame.event.get():
 				if event.type == pygame.QUIT:
-					pygame.quit()
-					sys.exit()
+					return 'quitgame'
 				elif event.type == pygame.KEYDOWN:
-					#allow for the same loop to both record the score, as well as
-					#kick the user back to the intro screen once the score entry is over.
-					if collectScore:
+					if go_state == 'get_score':
 						next_char = str(event.unicode)
 						if next_char.isalnum():	#keeps input limited to letters/numbers
 							playerInitials.set_text(playerInitials.text + next_char.upper())
 					else:
-						displayScores = False
-			if collectScore:		#if collectScore, get the score
-				#while playerInitials.text is short, display the characters.
-				#once it's 3 characters long, add it to the score list, 
-				#then sort list based on the scores, reverse it, and pop off any scores 
-				#that are beyond the fifth score. finally, pickle and save if a new score is actually added.
-				if len(playerInitials.text) < 3:
-					congratsText.draw()
-					if playerInitials.text:
-						playerInitials.draw()
-				else:
+						go_state = 'exit'
+			if go_state == 'get_score':	
+				#once we get 3 initials, sort the list of hi scores and save the top 5
+				if len(playerInitials.text) >= 3:
 					scoreList.append([playerInitials.text, ship.score])
 					scoreList.sort(key=lambda x: x[1])
 					scoreList.reverse()
-					while len(scoreList) > 5:
-						scoreList.pop()
-					pickleScore = pickle.dumps(scoreList)
-					f = open('scores.py', 'w')
-					f.write(pickleScore)
-					f.close()
-					collectScore = False
-			else:
-				totalScores = 1
-				while scoremaking:
-					for initials, hiscore in scoreList:
-						nextX, nextY = (SCREENWIDTH / 3, ((SCREENHEIGHT + 150) / 8) * totalScores)
-						colormod = (1.0 - float(nextY) / SCREENHEIGHT)
-						scorecolor = [int(c * colormod) for c in (50, 250, 50)]
-						initialText = TextObj(0, 0, initials, scorecolor, GAMEFONT)
-						initialText.pin_corner_to('center', (nextX, nextY))
-						hiscoreText = TextObj(0, 0, hiscore, scorecolor, GAMEFONT)
-						hiscoreText.pin_corner_to('center', (nextX * 2, nextY))
-						topScores.add(initialText, hiscoreText)
-						totalScores += 1
-					scoremaking = False
-					
+					pickleScore = pickle.dumps(scoreList[:5])
+					with open('scores.py', 'w') as f:
+						f.write(pickleScore)
+					go_state = 'build_scores'
+			if go_state == 'build_scores':
+				for txt in get_score_queue:
+					txt.kill()
+				for index, name_score in enumerate(scoreList):
+					nextX, nextY = (SCREENWIDTH / 3, ((SCREENHEIGHT + 150) / 8) * (index + 1))
+					colormod = (1.0 - float(nextY) / SCREENHEIGHT)
+					scorecolor = [int(c * colormod) for c in (50, 250, 50)]
+					initialText = TextObj(0, 0, name_score[0], scorecolor, GAMEFONT)
+					initialText.pin_corner_to('center', (nextX, nextY))
+					hiscoreText = TextObj(0, 0, name_score[1], scorecolor, GAMEFONT)
+					hiscoreText.pin_corner_to('center', (nextX * 2, nextY))
+					get_score_queue.add(initialText, hiscoreText)
+				go_state = 'show_scores'
+				
 			DISPLAYSURF.fill(BLACK)
 			BGStars.update()
-			for score in topScores:
-				score.draw()
+			for txt in get_score_queue:
+				txt.draw()
 			pygame.display.flip()
 			FPSCLOCK.tick(FPS)
 		pygame.mixer.music.stop()
@@ -882,9 +874,20 @@ class GameHandler(object):
 			self.intro_loop()
 			self.level_loop()
 			self.game_over_loop()
+			
+	def alt_master(self):
+		states = (self.intro_loop, self.level_loop, self.game_over_loop)
+		current_state = 0
+		while True:
+			next_state = states[current_state % len(states)]()
+			if next_state is 'quitgame':
+				return False
+			else:
+				current_state += 1
 
 class LevelObj(object):
 	def __init__(self, level_num):
+		self.state = 'play'
 		self.world, self.stage = divmod(level_num, 4)
 		self.goodqueue = goodqueue
 		self.badqueue = badqueue
@@ -917,19 +920,21 @@ class LevelObj(object):
 		
 		self.level_text.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 20))
 		self.gameover_text.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 2))
+		self.gameover_text.visible = False
 		
 		self.score_num.ship_set_score = self.score_num.set_text
 		self.score_num.sub('ship_set_score')
 		self.lives_num.ship_set_lives = self.lives_num.set_text
 		self.lives_num.sub('ship_set_lives')
 		
-		self.textqueue.add(self.score_text, self.score_num, self.lives_text, self.lives_num, self.level_text)
-		self.allqueue.add(PlayerMouse(*pygame.mouse.get_pos(), target=ship))
+		self.textqueue.add(self.score_text, self.score_num, self.lives_text, 
+							self.lives_num, self.level_text, self.gameover_text)
+		self.allqueue.add(PlayerMouse(*pygame.mouse.get_pos(), bound_to=ship))
 		
 		shipX, shipY = int(ship.x), int(ship.y) #need integers because range() only takes ints
 		possibleAI = {
-						0:[Enemy, Enemy],
-						1:[Enemy, Enemy],
+						0:[Scooter, Scooter],
+						1:[Scooter, Scooter],
 						2:[Sweeper, Sweeper],
 						3:[Sweeper, Sweeper]
 				}
@@ -951,23 +956,24 @@ class LevelObj(object):
 
 	def play(self):
 		go_to_gameover = FPS * 3
-		paused = False
 		if self.stage % 4 == 0 and self.world > 0:
 			other_dirs = [d for d in DIR_VALS if d != BGStars.direction]
 			BGStars.direction = random.choice(other_dirs)
-		
-		while True:
+		while self.state is not 'exit':
 			for event in pygame.event.get(): #get player events and pass them to the ship's event handler
 				if event.type == pygame.QUIT:
-					pygame.quit()
-					sys.exit()
+					return 'quitgame'
 				elif event.type == pygame.KEYDOWN:
 					if event.key == pygame.K_p:
-						paused = False if paused else True
+						if self.state is 'play':
+							self.state = 'paused'
+						elif self.state is 'paused':
+							self.state = 'play'
 					else:
 						ship.handle_key(event.key)
-			if not paused:
+			if self.state is not 'paused':
 				self.allqueue.update()
+			if self.state is 'play':
 				hit_list = pygame.sprite.groupcollide(self.goodqueue, self.badqueue, False, False)
 				for goodguy, badguys in hit_list.iteritems():
 					if goodguy is not ship:
@@ -976,14 +982,19 @@ class LevelObj(object):
 							if baddie not in self.badqueue and baddie.points:
 								ship.score += baddie.points
 					goodguy.got_hit()
-				if not ship.lives:
-					go_to_gameover -= 1
-					if self.gameover_text not in self.textqueue:
-						self.textqueue.add(self.gameover_text)
-				if not self.badqueue or go_to_gameover <= 0:	#return True to generate new level
-					for txt in self.textqueue:					#return False for game over
-						txt.kill()
-					return True if not self.badqueue else False
+			if not ship.lives:
+				self.state = 'gameover'
+				self.gameover_text.visible = True
+			if not self.badqueue:
+				self.state = 'exit'
+			if self.state is 'gameover':
+				go_to_gameover -= 1
+				if go_to_gameover <= 0:
+					self.state = 'exit'
+			if self.state is 'exit':
+				for txt in self.textqueue:
+					txt.kill()
+				return True if not self.badqueue else False
 			
 			DISPLAYSURF.fill(BLACK)
 			BGStars.update()
@@ -991,14 +1002,12 @@ class LevelObj(object):
 				obj.draw()
 			for text in self.textqueue:
 				text.draw()
-			#if not ship.lives:
-			#	go_to_gameover -= 1
-			#	if self.gameover_text not in self.textqueue:
-			#		self.textqueue.add(self.gameover_text)
 			pygame.display.flip()
 			FPSCLOCK.tick(FPS)
 
 
 if __name__ == "__main__":
 	TheGame = GameHandler()
-	TheGame.master_loop()
+	TheGame.alt_master()
+	print " - fin -"
+	sys.exit(pygame.quit())
