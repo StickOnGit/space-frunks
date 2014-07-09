@@ -140,8 +140,8 @@ class ListenSprite(pygame.sprite.Sprite):
 		self.img = img
 		self.drawImg = img
 		self.rect = self.img.get_rect(center=(x, y))
-		self.x = self.rect.center[0]
-		self.y = self.rect.center[1]
+		self.x = self.rect.centerx
+		self.y = self.rect.centery
 		self.direction = [0, 0]
 		self.target = [0, 0]
 		self.speed = 0
@@ -151,21 +151,21 @@ class ListenSprite(pygame.sprite.Sprite):
 	def pos(self):
 		return [self.x, self.y]
 		
-	@property
-	def shown_image(self):
-		return rotate_img(self.drawImg, -90 - math.degrees(math.atan2(self.direction[1], self.direction[0])))
-		
 	@pos.setter
 	def pos(self, xy):
 		self.x, self.y = xy
-
+		
 	def __setattr__(self, k, v):
 		super(ListenSprite, self).__setattr__(k, v)
 		if k == 'x':
-			self.rect.center = (self.x, self.rect.center[1])
+			self.rect.centerx = self.x
 		if k == 'y':
-			self.rect.center = (self.rect.center[0], self.y)
-			
+			self.rect.centery = self.y
+		
+	@property
+	def shown_image(self):
+		return rotate_img(self.drawImg, -90 - math.degrees(math.atan2(self.direction[1], self.direction[0])))
+	
 	def set_direction(self, target):
 		self.direction = [i / abs(i) if i != 0 else 0 for i in [a - b for a, b in zip(target, self.pos)]]
 		if not 0 in self.direction:
@@ -507,7 +507,6 @@ class Scooter(Enemy):
 		super(Scooter, self).__init__(x, y)
 		self.set_target_with_distance(self.range - self.counter)
 		
-		
 	def unique_action(self):
 		"""A hook for new movements. 
 		Replace this with new logic to change enemy behavior.
@@ -616,9 +615,6 @@ class Bullet(ListenSprite):
 		self.counter += self.speed
 		if is_out_of_bounds(self.pos, offset=50) or self.counter >= self.range:
 			self.kill()
-			
-	#def get_shown_image(self):
-	#	return self.drawImg
 
 	def got_hit(self):
 		self.kill()
@@ -673,6 +669,9 @@ class Starfield(object):
 			stars = self.stars
 		for i in xrange(stars):
 			self.starfield.append([random.randint(0, i) for i in (SCREENWIDTH, SCREENHEIGHT)])
+			
+	def new_direction(self, dirs=DIR_VALS):
+		self.direction = random.choice([x for x in dirs if x != self.direction])
 
 	def update(self):
 		"""Creates a parallax effect by moving stars at different speeds 
@@ -990,12 +989,10 @@ class LevelObj(object):
 		for k, v in Obvs.iteritems():
 			print "{}: {}".format(k, v)
 			
-
 	def play(self):
 		go_to_gameover = FPS * 3
 		if self.stage % 4 == 0 and self.world > 0:
-			other_dirs = [d for d in DIR_VALS if d != BGStars.direction]
-			BGStars.direction = random.choice(other_dirs)
+			BGStars.new_direction()
 		while self.state != 'exit':
 			for event in pygame.event.get(): #get player events and pass them to the ship's event handler
 				if event.type == pygame.QUIT:
