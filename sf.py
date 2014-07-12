@@ -140,27 +140,45 @@ class ListenSprite(pygame.sprite.Sprite):
 		self.img = img
 		self.drawImg = img
 		self.rect = self.img.get_rect(center=(x, y))
-		self.x = self.rect.centerx
-		self.y = self.rect.centery
+		self._xy = self.rect.center
 		self.direction = [0, 0]
 		self.target = [0, 0]
 		self.speed = 0
 		self.visible = True
 		
 	@property
+	def x(self):
+		return self._xy[0]
+	
+	@x.setter
+	def x(self, value):
+		self._xy[0] = value
+		self.rect.centerx = self._xy[0]
+	
+	@property
+	def y(self):
+		return self._xy[1]
+	
+	@y.setter
+	def y(self, value):
+		self._xy[1] = value
+		self.rect.centery = self._xy[1]
+		
+	@property
 	def pos(self):
-		return [self.x, self.y]
+		return self._xy
 		
 	@pos.setter
 	def pos(self, xy):
-		self.x, self.y = xy
+		self._xy = xy
+		self.rect.center = self._xy
 		
-	def __setattr__(self, k, v):
-		super(ListenSprite, self).__setattr__(k, v)
-		if k == 'x':
-			self.rect.centerx = self.x
-		if k == 'y':
-			self.rect.centery = self.y
+	#def __setattr__(self, k, v):
+	#	super(ListenSprite, self).__setattr__(k, v)
+	#	if k == 'x':
+	#		self.rect.centerx = self.x
+	#	if k == 'y':
+	#		self.rect.centery = self.y
 		
 	@property
 	def shown_image(self):
@@ -764,6 +782,7 @@ class GameHandler(object):
 		self.gameover_queue = pygame.sprite.Group()
 		self.title_font = pygame.font.Font('freesansbold.ttf', 32)
 		self.menu_font = pygame.font.Font('freesansbold.ttf', 18)
+		self.states = (self.intro_loop, self.level_loop, self.game_over_loop)
 		
 		self.intro_prep()
 		
@@ -772,10 +791,6 @@ class GameHandler(object):
 		titleObj.pin_corner_to('center', (SCREENWIDTH / 2, (SCREENHEIGHT / 2) - 100))
 		
 		menu_list = 'Press any key to play#Mouse moves ship#10-keypad fires in 8 directions'.split('#')
-		#menuObj = MultiText(all_texts=menu_list, color=GREEN, 
-		#					font=self.menu_font, 
-		#					switch=(FPS * 1.15)
-		#				)
 		menuObj = MultiText(0, 0, menu_list, GREEN, self.menu_font, (FPS * 1.15))
 		menuObj.pin_corner_to('center', (SCREENWIDTH / 2, (SCREENHEIGHT / 2) + 100))
 		self.intro_queue.add(titleObj, menuObj)
@@ -817,10 +832,6 @@ class GameHandler(object):
 				if event.type == pygame.QUIT:
 					return 'quitgame'
 				elif event.type == pygame.KEYDOWN: #prepare for new game
-					pygame.mouse.set_pos([SCREENWIDTH / 2, SCREENHEIGHT / 2])
-					ship.ready_new_game(SCREENWIDTH / 2, SCREENHEIGHT / 2)
-					goodqueue.add(ship)
-					allqueue.add(ship)
 					intro_state = 'exit'
 			self.intro_queue.update()
 			DISPLAYSURF.fill(BLACK)
@@ -829,6 +840,11 @@ class GameHandler(object):
 				word.draw()
 			pygame.display.flip()
 			FPSCLOCK.tick(FPS)
+		x, y = DISPLAYSURF.get_rect().center
+		pygame.mouse.set_pos([x, y])
+		ship.ready_new_game(x, y)
+		goodqueue.add(ship)
+		allqueue.add(ship)
 
 	def level_loop(self):
 		"""Determines the difficulty of the next level, 
@@ -896,22 +912,13 @@ class GameHandler(object):
 		pygame.mixer.music.stop()
 		for txt in self.gameover_queue:
 			txt.kill()
-
-	def master_loop(self):		#the one loop that binds them all
-		while True:
-			self.intro_loop()
-			self.level_loop()
-			self.game_over_loop()
 			
-	def alt_master(self):
-		states = (self.intro_loop, self.level_loop, self.game_over_loop)
-		current_state = 0
-		while True:
-			next_state = states[current_state % len(states)]()
-			if next_state == 'quitgame':
-				return False
-			else:
-				current_state += 1
+	def state_master(self):
+		now = 0
+		while self.states[now]() != 'quitgame':
+			now += 1
+			if now >= len(self.states):
+				now = 0
 
 class LevelObj(object):
 	def __init__(self, level_num):
@@ -925,14 +932,7 @@ class LevelObj(object):
 		self.score_font = pygame.font.Font('freesansbold.ttf', 18)
 		self.pts_font = pygame.font.Font('freesansbold.ttf', 10)
 		self.gameover_font = pygame.font.Font('freesansbold.ttf', 36)
-		#self.score_text = TextObj(0, 0, 'Score:', WHITE, self.score_font)
-		#self.score_num = TextObj(0, 0, ship.score, WHITE, self.score_font)
-		#self.lives_text = TextObj(0, 0, 'Lives:', WHITE, self.score_font)
-		#self.lives_num = TextObj(0, 0, ship.lives, WHITE, self.score_font)
-		#self.level_text = TextObj(0, 0, 'Level %d - %d' % (self.world + 1, self.stage + 1), 
-		#							WHITE, self.score_font)
-		#self.gameover_text = TextObj(0, 0, 'G  A  M  E    O  V  E  R', GREEN, self.gameover_font)
-		self.prep()
+		self.go_to_gameover = FPS * 3
 		
 	def prep(self):
 		score_text = TextObj(0, 0, 'Score:', WHITE, self.score_font)
@@ -986,13 +986,14 @@ class LevelObj(object):
 			NewEnemy.points = int(math.floor(NewEnemy.points + ((NewEnemy.points / 10) * variance)))
 			self.badqueue.add(NewEnemy)
 			self.allqueue.add(NewEnemy)
-		for k, v in Obvs.iteritems():
-			print "{}: {}".format(k, v)
-			
-	def play(self):
-		go_to_gameover = FPS * 3
+		##for k, v in Obvs.iteritems():
+		##	print "{}: {}".format(k, v)
+		##self.go_to_gameover = FPS * 3
 		if self.stage % 4 == 0 and self.world > 0:
 			BGStars.new_direction()
+			
+	def play(self):
+		self.prep()
 		while self.state != 'exit':
 			for event in pygame.event.get(): #get player events and pass them to the ship's event handler
 				if event.type == pygame.QUIT:
@@ -1023,13 +1024,9 @@ class LevelObj(object):
 			if not self.badqueue:
 				self.state = 'exit'
 			if self.state == 'gameover':
-				go_to_gameover -= 1
-				if go_to_gameover <= 0:
+				self.go_to_gameover -= 1
+				if self.go_to_gameover <= 0:
 					self.state = 'exit'
-			if self.state == 'exit':
-				for txt in self.textqueue:
-					txt.kill()
-				return True if not self.badqueue else False
 			
 			DISPLAYSURF.fill(BLACK)
 			BGStars.update()
@@ -1039,10 +1036,13 @@ class LevelObj(object):
 				text.draw()
 			pygame.display.flip()
 			FPSCLOCK.tick(FPS)
+		for txt in self.textqueue:
+			txt.kill()
+		return True if not self.badqueue else False
 
 
 if __name__ == "__main__":
 	TheGame = GameHandler()
-	TheGame.alt_master()
+	TheGame.state_master()
 	print " - fin -"
 	sys.exit(pygame.quit())

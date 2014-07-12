@@ -9,6 +9,19 @@ The bad guys - apparently a race of interstellar moving targets known as... 'fru
 This game is written in Python 2.7 and requires PyGame.
 
 CHANGELOG:
+07/11/14
+Oh just all kinds of shit I don't even
+	- event lib a little different than before - I wrote something really heavy, so I got rid of it.
+	- it's a little more state machine-y now than before. I like it, though it is inconsistent.
+	- objects publish more and there aren't nearly as many decorators as before.
+	- bad guys are inheriting from a base class now instead of monkeypatching each instance
+	- way more code to borrow against in the base ListenSprite class
+	
+	TODO:
+	- Still all code repeat-y in places. Being more state machine-ish will make that simple-esque to remove.
+	- Probably getting to the point where more separate files = more betterer
+	- Oh I'm sure there are other things but I got this hungry 6 week old baby, so
+
 04/27/14
 	- Swapped out my old event objects, put in new pubsub library that I wrote. Yay. Fixes issues where the objects had to be created at dumb times; objects just subscribe to events and publish events and stuff, and it's good.
 	- Player ship has an animation on death now.
