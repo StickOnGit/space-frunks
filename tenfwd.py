@@ -1,5 +1,4 @@
 from collections import defaultdict
-from threading import Thread
 
 Obvs = defaultdict(set)	#dict to hold observers. key:value is "message":set("objects")
 
@@ -18,47 +17,11 @@ def rm_from_all(obj):
 		if obj in Obvs[message]:
 			Obvs[message].remove(obj)
 
-def msg(obj, message=None, *args, **kwargs):
-	if message is not None:
-		return getattr(obj, message)(*args, **kwargs)
-	else:
-		if 'get' in kwargs:
-			return getattr(obj, kwargs['get'])
-		elif 'set' in kwargs:
-			return setattr(obj, kwargs['set'][0], kwargs['set'][1])
-"""			
-def thread_msg(obj, message=None, *args, **kwargs):
-	if message is not None:
-		process = lambda: getattr(obj, message)(*args, **kwargs)
-	else:
-		if 'get' in kwargs:
-			process = lambda: getattr(obj, kwargs['get'])
-		elif 'set' in kwargs:
-			process = lambda: setattr(obj, kwargs['set'][0], kwargs['set'][1])
-	work = Thread(target=process)
-	work.start()
-	work.join()
-	
-msg = new_msg
-"""		
-			
-def notify(obj, message, *args, **kwargs):
-	"""Sends message to target and observers."""
-	msg(obj, message, *args, **kwargs)
-	publish(message, *args, **kwargs)
-	
 def publish(message, *args, **kwargs):
-	"""Sends message to observers. No target."""
-	for peep in Obvs[message]:
-		msg(peep, message, *args, **kwargs)
-
-###test class
-class A(object):
-	def __init__(self):
-		self.x = 1235
-	
-	def foo(self, value=1):
-		self.x += value
-	
-	def bar(self):
-		return "Bar called - x is %d" % self.x
+	"""Sends message to observers."""
+	for obj in Obvs[message]:
+		getattr(obj, message)(*args, **kwargs)
+		
+def publish_with_results(message, *args, **kwargs):
+	"""Same as publish, but returns list of results."""
+	return [getattr(obj, message)(*args, **kwargs) for obj in Obvs[message]]

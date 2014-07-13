@@ -12,7 +12,7 @@ import random
 import sys
 import spritesheet
 import math
-from tenfwd import add_observer, rm_observer, rm_from_all, msg, publish, Obvs
+from tenfwd import add_observer, rm_observer, rm_from_all, publish, publish_with_results, Obvs
 from os import path
 try:
 	import cPickle as pickle
@@ -133,6 +133,28 @@ BOOMTHR = ALLSHEET.image_at((64, 96, 32, 32), -1)
 BOOMFOR = ALLSHEET.image_at((96, 96, 32, 32), -1)
 BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR]
 
+class Scene(object):
+	def __init__(self):
+		self._did_call_enter = False
+	
+	def enter(self, *args, **kwargs):
+		pass
+	
+	def main(self, *args, **kwargs):
+		pass
+		
+	def exit(self, *args, **kwargs):
+		pass
+		
+	def go(self, *args, **kwargs):
+		if self._did_call_enter == False:
+			self.enter(*args, **kwargs)
+			self._did_call_enter = True
+		step = self.main(*args, **kwargs)
+		if not step:
+			self.exit(*args, **kwargs)
+		return step
+
 
 class ListenSprite(pygame.sprite.Sprite):
 	def __init__(self, x=1, y=1, img=PLAYERSHIPIMG):
@@ -172,13 +194,6 @@ class ListenSprite(pygame.sprite.Sprite):
 	def pos(self, xy):
 		self._xy = xy
 		self.rect.center = self._xy
-		
-	#def __setattr__(self, k, v):
-	#	super(ListenSprite, self).__setattr__(k, v)
-	#	if k == 'x':
-	#		self.rect.centerx = self.x
-	#	if k == 'y':
-	#		self.rect.centery = self.y
 		
 	@property
 	def shown_image(self):
@@ -270,7 +285,7 @@ class TextObj(ListenSprite):
 	def show(self):
 		self.visible = True
 		
-	def pin_corner_to(self, corner, coordinates):
+	def pin_at(self, corner, coordinates):
 		self.pinned = True
 		self.pinned_to = (corner, coordinates)
 		self.rect = self.find_rect()
@@ -720,17 +735,29 @@ class Starfield(object):
 			if not -1 < star[1] < SCREENHEIGHT + 1:
 				star[0] = random.randrange(0, SCREENWIDTH)
 				star[1] = SCREENHEIGHT + speed if star[1] <= 0 else 0 - speed
+ 
 
 
-###
-#instantiate things that are (for now) global
-#this needs to be refactored
-ship = Player(SCREENWIDTH / 2, SCREENHEIGHT / 2)
-goodqueue = pygame.sprite.Group()
-badqueue = pygame.sprite.Group()
-allqueue = pygame.sprite.Group()
-Loader = ObjLoader() ##set and forget this guy :)	 
-BGStars = Starfield()
+class StatKeeper(object):
+	def __init__(self):
+		self.last_score = 0
+		self.last_lives = 0
+		add_observer(self, 'set_last_score')
+		add_observer(self, 'get_last_score')
+		add_observer(self, 'set_last_lives')
+		add_observer(self, 'get_last_lives')
+	
+	def set_last_score(self, v):
+		self.last_score = v
+	
+	def get_last_score(self):
+		return self.last_score
+	
+	def set_last_lives(self, v):
+		self.last_lives = v
+	
+	def get_last_lives(self):
+		return self.last_lives
 		
 #def enemy_boomer(self):
 #	"""Comes in from the borders and then blows up for big damages."""
@@ -761,288 +788,276 @@ BGStars = Starfield()
 #		self.speed = 3
 
 
-class Scene(object):
-	def __init__(self, texts={}, queues={}):
-		self.texts = texts
-		self.queues = queues
-		
-	def update(self):
-		pass
-			
-class IntroScene(Scene):
-	def __init__(self, texts={}, queues={}):
-		super(IntroScene, self).__init__(texts, queues)
-	
-	def update():
-		pass
-
-class GameHandler(object):
+class GameScene(Scene):
 	def __init__(self):
-		self.intro_queue = pygame.sprite.Group()
-		self.gameover_queue = pygame.sprite.Group()
+		super(GameScene, self).__init__()
+		self.allq = pygame.sprite.Group()
+		self.textq = pygame.sprite.Group()
+		add_observer(self, 'made_like_object')
+		add_observer(self, 'made_object')
+		
+	def made_like_object(self, sender, objtype, **kwargs):
+		"""Creates new object and places it in
+		the same Sprite Groups that the message
+		sender belongs to.
+		"""
+		new_obj = objtype(**kwargs)
+		for group in sender.groups():
+			group.add(new_obj)
+			
+	def made_object(self, sender, objtype, **kwargs):
+		"""Creates new object and places it 
+		just in the allqueue.
+		"""
+		new_obj = objtype(**kwargs)
+		self.allq.add(new_obj)
+		
+	def exit(self, *args):
+		for obj in [self] + self.allq.sprites() + self.textq.sprites():
+			rm_from_all(obj)
+		
+class IntroScene(GameScene):
+	def __init__(self):
+		super(IntroScene, self).__init__()
 		self.title_font = pygame.font.Font('freesansbold.ttf', 32)
 		self.menu_font = pygame.font.Font('freesansbold.ttf', 18)
-		self.states = (self.intro_loop, self.level_loop, self.game_over_loop)
 		
-		self.intro_prep()
-		
-	def intro_prep(self):
+	def enter(self, *args):
 		titleObj = TextObj(0, 0, 'Space Frunks', GREEN, self.title_font)
-		titleObj.pin_corner_to('center', (SCREENWIDTH / 2, (SCREENHEIGHT / 2) - 100))
+		titleObj.pin_at('center', (SCREENWIDTH / 2, (SCREENHEIGHT / 2) - 100))
 		
 		menu_list = 'Press any key to play#Mouse moves ship#10-keypad fires in 8 directions'.split('#')
 		menuObj = MultiText(0, 0, menu_list, GREEN, self.menu_font, (FPS * 1.15))
-		menuObj.pin_corner_to('center', (SCREENWIDTH / 2, (SCREENHEIGHT / 2) + 100))
-		self.intro_queue.add(titleObj, menuObj)
+		menuObj.pin_at('center', (SCREENWIDTH / 2, (SCREENHEIGHT / 2) + 100))
+		self.allq.add(titleObj, menuObj)
+	
+	def main(self, events):
+		for event in events:
+			if event.type == pygame.KEYDOWN: #prepare for new game
+				return False
+		self.allq.update()
+		return True
 		
-	def gameover_prep(self):
-		pygame.event.get()					#get() empties event queue
-		for thing in allqueue:
-			thing.kill()
-		allqueue.empty()
-		
-		playerInitials = TextObj(0, 0, '', WHITE, GAMEFONT)
-		playerInitials.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 2))
-		playerInitials.got_initial = playerInitials.set_text
-		playerInitials.sub('got_initial')
-		
-		congratsText = TextObj(0, 0, 'High score!  Enter your name, frunk destroyer.', GREEN, GAMEFONT)
-		congratsText.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 10))
-		
-		self.gameover_queue.add(playerInitials, congratsText)
-		
-	def build_score_list(self):
-		for index, name_score in enumerate(scoreList):
-			nextX, nextY = (SCREENWIDTH / 3, ((SCREENHEIGHT + 150) / 8) * (index + 1))
-			colormod = (1.0 - float(nextY) / SCREENHEIGHT)
-			scorecolor = [int(c * colormod) for c in (50, 250, 50)]
-			initialText = TextObj(0, 0, name_score[0], scorecolor, GAMEFONT)
-			initialText.pin_corner_to('center', (nextX, nextY))
-			hiscoreText = TextObj(0, 0, name_score[1], scorecolor, GAMEFONT)
-			hiscoreText.pin_corner_to('center', (nextX * 2, nextY))
-			self.gameover_queue.add(initialText, hiscoreText)
-		
-	def intro_loop(self):
-		"""Establishes the text in the intro screen and waits for the user to initialize
-		a new game with the old 'Press Any Key' trick.
-		"""
-		intro_state = 'waiting'
-		while intro_state == 'waiting':
-			for event in pygame.event.get():
-				if event.type == pygame.QUIT:
-					return 'quitgame'
-				elif event.type == pygame.KEYDOWN: #prepare for new game
-					intro_state = 'exit'
-			self.intro_queue.update()
-			DISPLAYSURF.fill(BLACK)
-			BGStars.update()
-			for word in self.intro_queue:
-				word.draw()
-			pygame.display.flip()
-			FPSCLOCK.tick(FPS)
-		x, y = DISPLAYSURF.get_rect().center
-		pygame.mouse.set_pos([x, y])
-		ship.ready_new_game(x, y)
-		goodqueue.add(ship)
-		allqueue.add(ship)
-
-	def level_loop(self):
-		"""Determines the difficulty of the next level, 
-		and whether or not the game has ended or progressed.
-		As lvl increments, so too does the stage and difficulty.
-		Negative values are useless, since the game cycles through 
-		to the first level with a nonzero number of badguys.
-		"""
-		lvl = STARTINGLEVEL
-		lvl_state = 'game_on'
-		while lvl_state == 'game_on':
-			Level = LevelObj(lvl)
-			next_lvl = Level.play()
-			if next_lvl == 'quitgame':
-				return 'quitgame'
-			if next_lvl: 
-				lvl += 1
-			else:
-				lvl_state = 'exit'
-
-	def game_over_loop(self):
-		"""Gets initials if you earned a hi-score. Displays scores."""
-		self.gameover_prep()
-		pygame.mixer.music.load(path.join('sounds', 'gameover.wav'))
-		pygame.mixer.music.play(-1)
-		
-		go_state = 'get_score' if ship.score > scoreList[-1][1] else 'build_scores'
-		player_initials = ''
-		while go_state is not 'exit':
-			for event in pygame.event.get():
-				if event.type == pygame.QUIT:
-					return 'quitgame'
-				elif event.type == pygame.KEYDOWN:
-					if go_state == 'get_score':
-						next_char = str(event.unicode)
-						if next_char.isalnum():	#keeps input limited to letters/numbers
-							player_initials += next_char.upper()
-							publish('got_initial', player_initials)
-					else:
-						go_state = 'exit'
-			if go_state == 'get_score':	
-				#once we get 3 initials, sort the list of hi scores and save the top 5
-				if len(player_initials) == 3:
-					scoreList.append([player_initials, ship.score])
-					scoreList.sort(key=lambda x: x[1])
-					scoreList.reverse()
-					while len(scoreList) > 5:
-						scoreList.pop()
-					pickleScore = pickle.dumps(scoreList)
-					with open('scores.py', 'w') as f:
-						f.write(pickleScore)
-					go_state = 'build_scores'
-			if go_state == 'build_scores':
-				for txt in self.gameover_queue:
-					txt.kill()
-				self.build_score_list()
-				go_state = 'show_scores'
-				
-			DISPLAYSURF.fill(BLACK)
-			BGStars.update()
-			for txt in self.gameover_queue:
-				txt.draw()
-			pygame.display.flip()
-			FPSCLOCK.tick(FPS)
-		pygame.mixer.music.stop()
-		for txt in self.gameover_queue:
-			txt.kill()
-			
-	def state_master(self):
-		now = 0
-		while self.states[now]() != 'quitgame':
-			now += 1
-			if now >= len(self.states):
-				now = 0
-
-class LevelObj(object):
-	def __init__(self, level_num):
-		self.state = 'play'
-		self.world, self.stage = divmod(level_num, 4)
-		self.goodqueue = goodqueue
-		self.badqueue = badqueue
-		self.allqueue = allqueue
-		self.textqueue = pygame.sprite.Group()
-		self.enemies = 3 + self.world if not TESTING else 0
+class LevelScene(GameScene):
+	def __init__(self, lvl=STARTINGLEVEL):
+		super(LevelScene, self).__init__()
+		self.lvl = lvl
+		self.goodq = pygame.sprite.Group()
+		self.badq = pygame.sprite.Group()
+		self.state = 'setup'
 		self.score_font = pygame.font.Font('freesansbold.ttf', 18)
 		self.pts_font = pygame.font.Font('freesansbold.ttf', 10)
 		self.gameover_font = pygame.font.Font('freesansbold.ttf', 36)
 		self.go_to_gameover = FPS * 3
 		
-	def prep(self):
+	def enter(self, *args):
 		score_text = TextObj(0, 0, 'Score:', WHITE, self.score_font)
-		score_num = TextObj(0, 0, ship.score, WHITE, self.score_font)
+		score_num = TextObj(0, 0, publish_with_results('get_last_score')[0], WHITE, self.score_font)
 		lives_text = TextObj(0, 0, 'Lives:', WHITE, self.score_font)
-		lives_num = TextObj(0, 0, ship.lives, WHITE, self.score_font)
-		level_text = TextObj(0, 0, 'Level %d - %d' % (self.world + 1, self.stage + 1), 
-									WHITE, self.score_font)
+		lives_num = TextObj(0, 0, publish_with_results('get_last_lives')[0], WHITE, self.score_font)
+		level_text = TextObj(0, 0, '', WHITE, self.score_font)
 		gameover_text = TextObj(0, 0, 'G  A  M  E    O  V  E  R', GREEN, self.gameover_font)
-		score_text.pin_corner_to('topleft', (15, 15))
-		score_num.pin_corner_to('topleft', (score_text.rect.topright[0] + 5, 
+		score_text.pin_at('topleft', (15, 15))
+		score_num.pin_at('topleft', (score_text.rect.topright[0] + 5, 
 											score_text.rect.topright[1]))
 		
-		lives_text.pin_corner_to('topright', (SCREENWIDTH - (SCREENWIDTH / 19), 15))
-		lives_num.pin_corner_to('topleft', (lives_text.rect.topright[0] + 5, 
+		lives_text.pin_at('topright', (SCREENWIDTH - (SCREENWIDTH / 19), 15))
+		lives_num.pin_at('topleft', (lives_text.rect.topright[0] + 5, 
 											lives_text.rect.topright[1]))
 		
-		level_text.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 20))
-		gameover_text.pin_corner_to('center', (SCREENWIDTH / 2, SCREENHEIGHT / 2))
+		level_text.pin_at('center', (SCREENWIDTH / 2, SCREENHEIGHT / 20))
+		gameover_text.pin_at('center', (SCREENWIDTH / 2, SCREENHEIGHT / 2))
 		gameover_text.visible = False
 		
 		score_num.ship_set_score = score_num.set_text
 		score_num.sub('ship_set_score')
 		lives_num.ship_set_lives = lives_num.set_text
 		lives_num.sub('ship_set_lives')
+		level_text.set_lvl_txt = level_text.set_text
+		level_text.sub('set_lvl_txt')
 		gameover_text.gameover_show = gameover_text.show
 		gameover_text.sub('gameover_show')
+		add_observer(self, 'made_object')
+		add_observer(self, 'made_like_object')
 		
-		self.textqueue.add(score_text, score_num, lives_text, 
-							lives_num, level_text, gameover_text)
-		self.allqueue.add(PlayerMouse(*pygame.mouse.get_pos(), bound_to=ship))
+		halfX, halfY = DISPLAYSURF.get_rect().center
+		pygame.mouse.set_pos([halfX, halfY])
 		
-		shipX, shipY = int(ship.x), int(ship.y) #need integers because range() only takes ints
+		self.player = Player(halfX, halfY)
+		self.player.add(self.goodq, self.allq)
+		self.textq.add(score_text, score_num, lives_text, 
+						lives_num, level_text, gameover_text)
+		self.allq.add(PlayerMouse(halfX, halfY, bound_to=self.player))
+	
+	def setup(self):
+		world, stage = [i + 1 for i in divmod(self.lvl, 4)]
+		enemies = 2 + world
+		publish('set_lvl_txt', 'Level {}-{}'.format(world, stage))
+		
+		shipX, shipY = [int(i) for i in self.player.pos] #need integers because range() only takes ints
 		possibleAI = {
-						0:[Scooter, Scooter],
 						1:[Scooter, Scooter],
-						2:[Sweeper, Sweeper],
-						3:[Sweeper, Sweeper]
+						2:[Scooter, Scooter],
+						3:[Sweeper, Sweeper],
+						4:[Sweeper, Sweeper]
 				}
-		kindsOfAI = possibleAI[self.stage]
-		if self.world >= 1:
-			kindsOfAI.append(Teleporter)
-		if self.world >= 3:
-			kindsOfAI.append(Rammer)
-		for i in xrange(0, self.enemies):
-			variance = random.randint(0, self.world)
+		kinds_of_AI = possibleAI[stage]
+		if world >= 2:
+			kinds_of_AI.append(Teleporter)
+		if world >= 4:
+			kinds_of_AI.append(Rammer)
+		for i in xrange(0, enemies):
+			variance = random.randint(0, world)
 			safex = range(10, (shipX - 25)) + range((shipX + 25), (SCREENWIDTH - 10))
 			safey = range(10, (shipY - 25)) + range((shipY + 25), (SCREENHEIGHT - 10))
-			NewEnemy = random.choice(kindsOfAI)(x=random.choice(safex), y=random.choice(safey))
+			NewEnemy = random.choice(kinds_of_AI)(x=random.choice(safex), y=random.choice(safey))
 			NewEnemy.speed = int(math.floor(NewEnemy.speed * (1.05 ** variance)))
 			NewEnemy.points = int(math.floor(NewEnemy.points + ((NewEnemy.points / 10) * variance)))
-			self.badqueue.add(NewEnemy)
-			self.allqueue.add(NewEnemy)
-		##for k, v in Obvs.iteritems():
-		##	print "{}: {}".format(k, v)
-		##self.go_to_gameover = FPS * 3
-		if self.stage % 4 == 0 and self.world > 0:
-			BGStars.new_direction()
+			NewEnemy.add(self.badq, self.allq)
+		#for k, v in Obvs.iteritems():
+		#	print "{}: {}".format(k, len(v))
+		#print ''.join(["=" for i in xrange(0, 20)])
+		if stage % 4 == 1 and world > 1:
+			BGStars.new_direction() #probs just change this to a publish
 			
-	def play(self):
-		self.prep()
-		while self.state != 'exit':
-			for event in pygame.event.get(): #get player events and pass them to the ship's event handler
-				if event.type == pygame.QUIT:
-					return 'quitgame'
-				elif event.type == pygame.KEYDOWN:
+	def main(self, events):
+		if self.state == 'gameover':
+			self.go_to_gameover -= 1
+			if self.go_to_gameover <= 0:
+				publish('set_last_score', self.player.score)
+				return False
+		if self.state == 'setup':
+			self.setup()
+			self.state = 'play'
+		if self.state == 'paused':
+			for event in events:
+				if event.type == pygame.KEYDOWN:
 					if event.key == pygame.K_p:
-						if self.state == 'play':
-							self.state = 'paused'
-						elif self.state == 'paused':
-							self.state = 'play'
+						self.state = 'play'
+			return True
+		if self.state == 'play':
+			for event in events:
+				if event.type == pygame.KEYDOWN:
+					if event.key == pygame.K_p:
+						self.state = 'paused'
 					else:
-						ship.handle_key(event.key)
-			if self.state != 'paused':
-				self.allqueue.update()
-			if self.state == 'play':
-				hit_list = pygame.sprite.groupcollide(self.goodqueue, self.badqueue, False, False)
-				for goodguy, badguys in hit_list.iteritems():
-					if goodguy is not ship:
-						for baddie in badguys:
-							baddie.got_hit()
-							if baddie not in self.badqueue and baddie.points:
-								ship.score += baddie.points
-					goodguy.got_hit()
-					
-			if not ship.lives:
-				self.state = 'gameover'
+						self.player.handle_key(event.key)
+			hit_list = pygame.sprite.groupcollide(self.goodq, self.badq, False, False)
+			for goodguy, badguys in hit_list.iteritems():
+				if goodguy is not self.player:
+					for baddie in badguys:
+						baddie.got_hit()
+						if baddie not in self.badq and baddie.points:
+							self.player.score += baddie.points
+				goodguy.got_hit()
+			if not self.player.lives:
 				publish('gameover_show')
-			if not self.badqueue:
-				self.state = 'exit'
-			if self.state == 'gameover':
-				self.go_to_gameover -= 1
-				if self.go_to_gameover <= 0:
-					self.state = 'exit'
+				self.state = 'gameover'
+			elif not self.badq:
+				self.lvl += 1
+				self.state = 'setup'
+		self.allq.update()
+		return True
+		
+class GameOverScene(GameScene):
+	def __init__(self):
+		super(GameOverScene, self).__init__()
+		self.state = 'build_scores'
+		self.player_initials = ''
+		self.ship_score = publish_with_results('get_last_score')[0] or 0
+		
+	def enter(self, *args):
+		pygame.event.get()					#get() empties event queue
+		
+		if self.ship_score > scoreList[-1][1]:
+			self.state = 'get_score'
+		
+		playerInitials = TextObj(0, 0, '', WHITE, GAMEFONT)
+		playerInitials.pin_at('center', (SCREENWIDTH / 2, SCREENHEIGHT / 2))
+		playerInitials.got_initial = playerInitials.set_text
+		playerInitials.sub('got_initial')
+		
+		congratsText = TextObj(0, 0, 'High score!  Enter your name, frunk destroyer.', GREEN, GAMEFONT)
+		congratsText.pin_at('center', (SCREENWIDTH / 2, SCREENHEIGHT / 10))
+		
+		self.textq.add(playerInitials, congratsText)
+		pygame.mixer.music.load(path.join('sounds', 'gameover.wav'))
+		pygame.mixer.music.set_volume(0.1)
+		pygame.mixer.music.play(-1)
+		
+	def build_score_list(self):
+		for index, name_score in enumerate(scoreList):
+			nextX, nextY = (SCREENWIDTH / 3, ((SCREENHEIGHT + 150) / 8) * (index + 1))
+			colormod = (1.0 - float(nextY) / SCREENHEIGHT)
+			scorecolor = [int(c * colormod) for c in (50, 250, 50)]
+			initialText = TextObj(nextX, nextY, name_score[0], scorecolor, GAMEFONT)
+			hiscoreText = TextObj(nextX * 2, nextY, name_score[1], scorecolor, GAMEFONT)
+			self.textq.add(initialText, hiscoreText)
 			
-			DISPLAYSURF.fill(BLACK)
-			BGStars.update()
-			for obj in self.allqueue:
-				obj.draw()
-			for text in self.textqueue:
-				text.draw()
-			pygame.display.flip()
-			FPSCLOCK.tick(FPS)
-		for txt in self.textqueue:
-			txt.kill()
-		return True if not self.badqueue else False
+	def main(self, events):
+		"""Gets initials if you earned a hi-score. Displays scores."""
+		if self.state == 'show_scores':
+			for event in events:
+				if event.type == pygame.KEYDOWN:
+					pygame.mixer.music.stop()
+					return False
+		if self.state == 'get_score':
+			for event in events:
+				if event.type == pygame.KEYDOWN:
+					next_char = str(event.unicode)
+					if next_char.isalnum():	#keeps input limited to letters/numbers
+						self.player_initials += next_char.upper()
+						publish('got_initial', self.player_initials)
+						if len(self.player_initials) == 3:
+							scoreList.append([self.player_initials, self.ship_score])
+							scoreList.sort(key=lambda x: x[1])
+							scoreList.reverse()
+							while len(scoreList) > 5:
+								scoreList.pop()
+							pickleScore = pickle.dumps(scoreList)
+							with open('scores.py', 'w') as f:
+								f.write(pickleScore)
+							self.state = 'build_scores'
+		if self.state == 'build_scores':
+			for txt in self.textq:
+				txt.kill()
+			for index, name_score in enumerate(scoreList):
+				nextX, nextY = (SCREENWIDTH / 3, ((SCREENHEIGHT + 150) / 8) * (index + 1))
+				colormod = (1.0 - float(nextY) / SCREENHEIGHT)
+				scorecolor = [int(c * colormod) for c in (50, 250, 50)]
+				initialText = TextObj(nextX, nextY, name_score[0], scorecolor, GAMEFONT)
+				hiscoreText = TextObj(nextX * 2, nextY, name_score[1], scorecolor, GAMEFONT)
+				self.textq.add(initialText, hiscoreText)
+			self.state = 'show_scores'
+		self.allq.update()
+		return True
 
+def SceneLoop():
+	BGStars = Starfield()
+	Keeper = StatKeeper()
+	scenes = (IntroScene, LevelScene, GameOverScene)
+	i = 0
+	current_scene = scenes[i]()
+	while True:
+		DISPLAYSURF.fill(BLACK)
+		BGStars.update()
+		events = pygame.event.get()
+		for event in events:
+			if event.type == pygame.QUIT:
+				return False
+		if not current_scene.go(events):
+			i += 1
+			if i >= len(scenes):
+				i = 0
+			current_scene = scenes[i]()
+		for obj in current_scene.allq:
+			obj.draw()
+		for obj in current_scene.textq:
+			obj.draw()
+		pygame.display.flip()
+		FPSCLOCK.tick(FPS)
 
 if __name__ == "__main__":
-	TheGame = GameHandler()
-	TheGame.state_master()
+	SceneLoop()
 	print " - fin -"
 	sys.exit(pygame.quit())
