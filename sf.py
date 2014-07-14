@@ -154,6 +154,7 @@ class Scene(object):
 		if not step:
 			self.exit(*args, **kwargs)
 		return step
+			
 
 
 class ListenSprite(pygame.sprite.Sprite):
@@ -892,7 +893,7 @@ class LevelScene(GameScene):
 	def setup(self):
 		world, stage = [i + 1 for i in divmod(self.lvl, 4)]
 		enemies = 2 + world
-		publish('set_lvl_txt', 'Level {}-{}'.format(world, stage))
+		publish('set_lvl_txt', 'Level {} - {}'.format(world, stage))
 		
 		shipX, shipY = [int(i) for i in self.player.pos] #need integers because range() only takes ints
 		possibleAI = {
