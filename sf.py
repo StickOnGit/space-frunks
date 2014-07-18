@@ -162,8 +162,7 @@ class ListenSprite(pygame.sprite.Sprite):
 		super(ListenSprite, self).__init__()
 		self.img = img
 		self.drawImg = img
-		self.rect = self.img.get_rect(center=(x, y))
-		self._xy = self.rect.center
+		self._xy = x, y
 		self.direction = [0, 0]
 		self.target = [0, 0]
 		self.speed = 0
@@ -223,19 +222,19 @@ class ListenSprite(pygame.sprite.Sprite):
 		else:
 			self.pos = target_pos
 
-	def resize_rect(self):
+	@property
+	def rect(self):
 		"""Gets the current drawn image's bounding rect,
 		centers it on the current rect, and then replaces
 		the current rect.
 		"""
 		new_rect = self.shown_image.get_bounding_rect()
 		new_rect.center = self.pos
-		self.rect = new_rect
+		return new_rect
 
 	def draw(self):
 		if self.visible:
 			DISPLAYSURF.blit(self.shown_image, self.shown_image.get_rect(center=self.pos))
-			#pygame.draw.rect(DISPLAYSURF, WHITE, self.rect, 1)
 
 	def sub(self, message):
 		add_observer(self, message)
@@ -257,7 +256,6 @@ class Explosion(ListenSprite):
 		self.imgs = imgs
 		self.counter = 0
 		self.rate = rate
-		self.rect = self.drawImg.get_rect(center=self.pos)
 		self.direction = random.choice(DIR_VALS)
 		
 	def update(self):
@@ -265,20 +263,18 @@ class Explosion(ListenSprite):
 		imgindex = self.counter / self.rate
 		if imgindex < len(self.imgs):
 			self.drawImg = self.imgs[imgindex]
-			self.resize_rect()
 		else:
 			self.kill()
 	
 class TextObj(ListenSprite):
 	def __init__(self, x=0, y=0, text='_default_', color=RED, font=GAMEFONT):
-		super(TextObj, self).__init__(x, y)
+		self._xy = [x, y]
 		self.text = str(text)
 		self.color = color
 		self.font = font
 		self.pinned = False
 		self.pinned_to = ('center', self.pos)
-		self.to_blit = self.set_to_blit()
-		self.rect = self.find_rect()
+		super(TextObj, self).__init__(x, y)
 		
 	def hide(self):
 		self.visible = False
@@ -289,20 +285,16 @@ class TextObj(ListenSprite):
 	def pin_at(self, corner, coordinates):
 		self.pinned = True
 		self.pinned_to = (corner, coordinates)
-		self.rect = self.find_rect()
 	
 	def set_text(self, text):
 		self.text = str(text)
-		self.to_blit = self.set_to_blit()
-		self.rect = self.find_rect()
-		
-	def set_ctr(self, newX, newY):
-		self.pos = newX, newY
-		
-	def set_to_blit(self):
+
+	@property
+	def to_blit(self):
 		return self.font.render(self.text, True, self.color)
-		
-	def find_rect(self): 
+
+	@property
+	def rect(self):
 		new_rect = self.to_blit.get_rect(center=self.pos)
 		if self.pinned:
 			setattr(new_rect, self.pinned_to[0], self.pinned_to[1])
@@ -323,7 +315,6 @@ class RiseText(TextObj):
 	def update(self):
 		self.counter -= 1
 		self.move()
-		self.rect = self.find_rect()
 		if self.counter < 0:
 			self.kill()
 			
@@ -348,7 +339,6 @@ class MultiText(TextObj):
 			next_text = 0
 		if current_text != next_text:
 			self.set_text(self.all_texts[next_text])
-			self.rect = self.find_rect()
 				
 
 class Player(ListenSprite):
@@ -402,7 +392,6 @@ class Player(ListenSprite):
 		and checks its point total for extra lives.
 		"""
 		self.move_to_target(pygame.mouse.get_pos())
-		self.resize_rect()
 		self.cooldown -= 1 if self.cooldown > 0 else 0
 		self.respawn -= 1 if self.respawn > 0 else 0
 		self.visible = self.is_visible()
@@ -452,7 +441,6 @@ class ShipPiece(ListenSprite):
 	def update(self):
 		self.counter -= 1
 		self.move()
-		self.resize_rect()
 		self.visible = True if self.counter % 3 == 1 else False
 		if self.counter <= 0:
 			self.kill()
@@ -461,20 +449,20 @@ class PlayerMouse(ListenSprite):
 	def __init__(self, x, y, bound_to, size=9):
 		super(PlayerMouse, self).__init__(x, y)
 		self.size = size
-		self.color = self.set_color()
-		self.rect = self.set_rect()
 		self.bound_to = bound_to
 		
-	def set_color(self):
+	@property
+	def color(self):
 		return (random.randrange(60, 220), random.randrange(60, 220), random.randrange(60, 220))
 		
-	def set_rect(self):
-		self.pos = pygame.mouse.get_pos()
-		return pygame.Rect(self.rect.x, self.rect.y, self.size, self.size)
+	@property
+	def rect(self):
+		new_rect = pygame.Rect(self.x, self.y, self.size, self.size)
+		new_rect.center = self.pos
+		return new_rect
 		
 	def update(self):
-		self.color = self.set_color()
-		self.rect = self.set_rect()
+		self.pos = pygame.mouse.get_pos()
 		
 	def draw(self):
 		if self.bound_to.visible and not self.rect.colliderect(self.bound_to.rect):
@@ -492,16 +480,8 @@ class Enemy(ListenSprite):
 		self.speed = 3
 		self.cooldown = FPS / 2
 		self.points = 100
-
-	def update(self):
-		"""obj.unique_action is 'where the action is' lulz
-		Replace that to make the enemy do different stuff.
-		self.resize_rect is a bit clutch, so don't replace that.
-		"""
-		self.unique_action()
-		self.resize_rect()
 	
-	def unique_action(self):
+	def update(self):
 		"""A hook for new movements. 
 		Replace this with new logic to change enemy behavior.
 		"""
@@ -540,11 +520,10 @@ class Scooter(Enemy):
 	def __init__(self, x, y):
 		super(Scooter, self).__init__(x, y)
 		self.set_target_with_distance(self.range - self.counter)
-		
-	def unique_action(self):
-		"""A hook for new movements. 
-		Replace this with new logic to change enemy behavior.
-		Default action is self.counter += 1 until > self.range, then reverse.
+	
+	def update(self):
+		""" Scoots back and forth.
+		self.counter += 1 until > self.range, then reverse.
 		"""
 		if self.counter >= self.range or is_out_of_bounds(self.pos) or self.pos == self.target:
 			self.counter = 0
@@ -561,8 +540,8 @@ class Sweeper(Enemy):
 		self.min_xy = -30
 		self.max_x = max_x
 		self.max_y = max_y
-		
-	def unique_action(self):
+	
+	def update(self):
 		self.move()
 		self.shot_check()
 		if is_out_of_bounds(self.pos):
@@ -578,8 +557,8 @@ class Rammer(Enemy):
 		super(Rammer, self).__init__(x, y)
 		self.speed = 2
 		self.points = 300
-		
-	def unique_action(self):
+	
+	def update(self):
 		self.move_to_target(self.origin if ship.respawn else ship.pos)
 		
 class Teleporter(Enemy):
@@ -595,8 +574,8 @@ class Teleporter(Enemy):
 		self.ylane = self.uplane + self.downlane
 		self.widex = range(self.xlane[0], self.xlane[-1])
 		self.widey = range(self.ylane[0], self.ylane[-1])
-		
-	def unique_action(self):
+	
+	def update(self):
 		self.move()
 		self.shot_check()
 		if is_out_of_bounds(self.pos):
@@ -635,7 +614,6 @@ class Bullet(ListenSprite):
 		self.direction = direction
 		self.range = SCREENDIAG + 20
 		self.counter = 0
-		self.resize_rect()
 		self.speed = speed
 		self.points = 0
 	
@@ -645,7 +623,6 @@ class Bullet(ListenSprite):
 
 	def update(self):
 		self.move()
-		self.resize_rect()
 		self.counter += self.speed
 		if is_out_of_bounds(self.pos, offset=50) or self.counter >= self.range:
 			self.kill()
@@ -693,6 +670,7 @@ class Starfield(object):
 		self.starfield = []
 		self.add_stars()
 		self.direction = DOWN
+		add_observer(self, 'new_direction')
 		
 	def add_stars(self, stars='_default'):
 		"""Adds X stars to self.starfield, which is just a list.
@@ -713,7 +691,7 @@ class Starfield(object):
 		it is given new semi-random values.
 		"""
 		for i, star in enumerate(self.starfield):
-			old_star = [p for p in star]
+			old_star = star[:]
 			speed = 1
 			color = (120, 70, 70)
 			if i % 3 == 1:
@@ -724,6 +702,7 @@ class Starfield(object):
 				color = (180, 150, 150)
 			for j, p in enumerate(star):
 				star[j] += speed * self.direction[j]
+			#new_star = [p + (speed * s) for p, s in zip(old_star, self.direction)]
 			#DRAW STARS BEFORE CHECKING FOR OFFSCREEN.
 			#Otherwise the old and new stars make random diagonal lines.
 			blinkrate = speed * 7
@@ -741,24 +720,15 @@ class Starfield(object):
 
 class StatKeeper(object):
 	def __init__(self):
-		self.last_score = 0
-		self.last_lives = 0
-		add_observer(self, 'set_last_score')
-		add_observer(self, 'get_last_score')
-		add_observer(self, 'set_last_lives')
-		add_observer(self, 'get_last_lives')
+		self.storage = {}
+		add_observer(self, 'save')
+		add_observer(self, 'give')
+		
+	def save(self, k, v):
+		self.storage[k] = v
 	
-	def set_last_score(self, v):
-		self.last_score = v
-	
-	def get_last_score(self):
-		return self.last_score
-	
-	def set_last_lives(self, v):
-		self.last_lives = v
-	
-	def get_last_lives(self):
-		return self.last_lives
+	def give(self, k):
+		return self.storage.get(k)
 		
 #def enemy_boomer(self):
 #	"""Comes in from the borders and then blows up for big damages."""
@@ -853,9 +823,9 @@ class LevelScene(GameScene):
 		
 	def enter(self, *args):
 		score_text = TextObj(0, 0, 'Score:', WHITE, self.score_font)
-		score_num = TextObj(0, 0, publish_with_results('get_last_score')[0], WHITE, self.score_font)
+		score_num = TextObj(0, 0, publish_with_results('give', 'last_score')[0], WHITE, self.score_font)
 		lives_text = TextObj(0, 0, 'Lives:', WHITE, self.score_font)
-		lives_num = TextObj(0, 0, publish_with_results('get_last_lives')[0], WHITE, self.score_font)
+		lives_num = TextObj(0, 0, publish_with_results('give', 'last_lives')[0], WHITE, self.score_font)
 		level_text = TextObj(0, 0, '', WHITE, self.score_font)
 		gameover_text = TextObj(0, 0, 'G  A  M  E    O  V  E  R', GREEN, self.gameover_font)
 		score_text.pin_at('topleft', (15, 15))
@@ -915,17 +885,14 @@ class LevelScene(GameScene):
 			NewEnemy.speed = int(math.floor(NewEnemy.speed * (1.05 ** variance)))
 			NewEnemy.points = int(math.floor(NewEnemy.points + ((NewEnemy.points / 10) * variance)))
 			NewEnemy.add(self.badq, self.allq)
-		#for k, v in Obvs.iteritems():
-		#	print "{}: {}".format(k, len(v))
-		#print ''.join(["=" for i in xrange(0, 20)])
 		if stage % 4 == 1 and world > 1:
-			BGStars.new_direction() #probs just change this to a publish
+			publish('new_direction')
 			
 	def main(self, events):
 		if self.state == 'gameover':
 			self.go_to_gameover -= 1
 			if self.go_to_gameover <= 0:
-				publish('set_last_score', self.player.score)
+				publish('save', 'last_score', self.player.score)
 				return False
 		if self.state == 'setup':
 			self.setup()
@@ -965,7 +932,7 @@ class GameOverScene(GameScene):
 		super(GameOverScene, self).__init__()
 		self.state = 'build_scores'
 		self.player_initials = ''
-		self.ship_score = publish_with_results('get_last_score')[0] or 0
+		self.ship_score = publish_with_results('give', 'last_score')[0] or 0
 		
 	def enter(self, *args):
 		pygame.event.get()					#get() empties event queue
