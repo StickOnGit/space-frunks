@@ -133,29 +133,6 @@ BOOMTHR = ALLSHEET.image_at((64, 96, 32, 32), -1)
 BOOMFOR = ALLSHEET.image_at((96, 96, 32, 32), -1)
 BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR]
 
-class Scene(object):
-	def __init__(self):
-		self._did_call_enter = False
-	
-	def enter(self, *args, **kwargs):
-		pass
-	
-	def main(self, *args, **kwargs):
-		pass
-		
-	def exit(self, *args, **kwargs):
-		pass
-		
-	def go(self, *args, **kwargs):
-		if self._did_call_enter == False:
-			self.enter(*args, **kwargs)
-			self._did_call_enter = True
-		step = self.main(*args, **kwargs)
-		if not step:
-			self.exit(*args, **kwargs)
-		return step
-			
-
 
 class ListenSprite(pygame.sprite.Sprite):
 	def __init__(self, x=1, y=1, img=PLAYERSHIPIMG):
@@ -167,6 +144,13 @@ class ListenSprite(pygame.sprite.Sprite):
 		self.target = [0, 0]
 		self.speed = 0
 		self.visible = True
+		self.blank_surf = self.set_blank_surf()
+		
+	def set_blank_surf(self):
+		blank_rect = self.img.get_rect()
+		blank_surf = pygame.Surface((blank_rect.w, blank_rect.h))
+		blank_surf.set_colorkey(BLACK)
+		return blank_surf
 		
 	@property
 	def x(self):
@@ -196,8 +180,11 @@ class ListenSprite(pygame.sprite.Sprite):
 		self.rect.center = self._xy
 		
 	@property
-	def shown_image(self):
-		return rotate_img(self.drawImg, -90 - math.degrees(math.atan2(self.direction[1], self.direction[0])))
+	def image(self):
+		if self.visible:
+			return rotate_img(self.drawImg, -90 - math.degrees(math.atan2(self.direction[1], self.direction[0])))
+		else:
+			return self.blank_surf
 	
 	def set_direction(self, target):
 		self.direction = [i / abs(i) if i != 0 else 0 for i in [a - b for a, b in zip(target, self.pos)]]
@@ -223,18 +210,22 @@ class ListenSprite(pygame.sprite.Sprite):
 			self.pos = target_pos
 
 	@property
-	def rect(self):
+	def hit_rect(self):
 		"""Gets the current drawn image's bounding rect,
 		centers it on the current rect, and then replaces
 		the current rect.
 		"""
-		new_rect = self.shown_image.get_bounding_rect()
+		new_rect = self.image.get_bounding_rect()
 		new_rect.center = self.pos
 		return new_rect
+	
+	@property
+	def rect(self):
+		return self.image.get_rect(center=self.pos)
 
 	def draw(self):
 		if self.visible:
-			DISPLAYSURF.blit(self.shown_image, self.shown_image.get_rect(center=self.pos))
+			DISPLAYSURF.blit(self.image, self.image.get_rect(center=self.pos))
 
 	def sub(self, message):
 		add_observer(self, message)
@@ -272,26 +263,54 @@ class TextObj(ListenSprite):
 		self.text = str(text)
 		self.color = color
 		self.font = font
+		self.brightness = 255
+		self.delay = 0
+		self.delay_counter = 0
 		self.pinned = False
 		self.pinned_to = ('center', self.pos)
+		self.to_blit = self.set_to_blit()
 		super(TextObj, self).__init__(x, y)
 		
-	def hide(self):
-		self.visible = False
+	def hide(self, delay=1):
+		self.delay = delay
+		self.delay_counter = delay
 	
-	def show(self):
-		self.visible = True
-		
+	def show(self, delay=1):
+		self.delay = -1 * delay
+		self.delay_counter = -1 * delay
+	
+	def fader(self):
+		tick = self.delay_counter / abs(self.delay_counter)
+		self.delay_counter -= tick
+		effect = float(self.delay_counter) / self.delay
+		if tick < 0:
+			self.brightness = int(255 - (255 * effect))
+		else:
+			self.brightness = int(255 * effect)
+		if self.brightness == 0:
+			self.visible = False
+		else:
+			self.visible = True
+
 	def pin_at(self, corner, coordinates):
 		self.pinned = True
 		self.pinned_to = (corner, coordinates)
 	
 	def set_text(self, text):
 		self.text = str(text)
+		self.to_blit = self.set_to_blit()
 
-	@property
-	def to_blit(self):
-		return self.font.render(self.text, True, self.color)
+	def set_to_blit(self):
+		text_tmp = self.font.render(self.text, True, self.color)
+		if self.brightness < 255:
+			rect_tmp = text_tmp.get_rect(center=self.pos)
+			NewText = pygame.Surface((rect_tmp.w, rect_tmp.h))
+			NewText.fill(BLACK)
+			NewText.blit(text_tmp, self.pos)
+			NewText.set_alpha(self.brightness)
+			return NewText
+		else:
+			return text_tmp
 
 	@property
 	def rect(self):
@@ -299,8 +318,21 @@ class TextObj(ListenSprite):
 		if self.pinned:
 			setattr(new_rect, self.pinned_to[0], self.pinned_to[1])
 		return new_rect
+		
+	@property
+	def image(self):
+		if self.delay_counter != 0:
+			self.fader()
+			self.to_blit = self.set_to_blit()
+		if self.visible:
+			return self.set_to_blit()
+		else:
+			return self.blank_surf
 
 	def draw(self):
+		if self.delay_counter != 0:
+			self.fader()
+			self.to_blit = self.set_to_blit()
 		if self.visible:
 			DISPLAYSURF.blit(self.to_blit, self.rect)
 		
@@ -408,7 +440,7 @@ class Player(ListenSprite):
 			self.respawn = FPS * 2
 			self.cooldown = FPS * 2
 			self.lives -= 1
-			img_rect = self.shown_image.get_rect()
+			img_rect = self.image.get_rect()
 			halfw = img_rect.width / 2
 			halfh = img_rect.height / 2
 			topX, topY = self.rect.topleft
@@ -419,7 +451,7 @@ class Player(ListenSprite):
 				self.pub(
 							'made_object', self, ShipPiece, 
 							x=bustedX, y=bustedY,
-							img_piece=self.shown_image.subsurface(BustedRect),
+							img_piece=self.image.subsurface(BustedRect),
 							direction=DIR_DIAGS[index]
 					)
 			playerDeadSound.play()
@@ -435,8 +467,14 @@ class ShipPiece(ListenSprite):
 		self.counter = FPS * 0.75
 	
 	@property
-	def shown_image(self):
-		return self.img
+	def image(self):
+		if self.visible:
+			return self.img
+		else:
+			blank_rect = self.img.get_rect()
+			blank_surf = pygame.Surface((blank_rect.w, blank_rect.h))
+			blank_surf.set_colorkey(BLACK)
+			return blank_surf
 	
 	def update(self):
 		self.counter -= 1
@@ -450,6 +488,8 @@ class PlayerMouse(ListenSprite):
 		super(PlayerMouse, self).__init__(x, y)
 		self.size = size
 		self.bound_to = bound_to
+		self.blank_surf = pygame.Surface((self.size, self.size))
+		self.blank_surf.set_colorkey(BLACK)
 		
 	@property
 	def color(self):
@@ -460,6 +500,13 @@ class PlayerMouse(ListenSprite):
 		new_rect = pygame.Rect(self.x, self.y, self.size, self.size)
 		new_rect.center = self.pos
 		return new_rect
+		
+	@property
+	def image(self):
+		self.blank_surf.fill(BLACK)
+		if self.bound_to.visible and not self.rect.colliderect(self.bound_to.rect):
+			pygame.draw.rect(self.blank_surf, self.color, (0, 0, self.size, self.size), 1)
+		return self.blank_surf
 		
 	def update(self):
 		self.pos = pygame.mouse.get_pos()
@@ -618,7 +665,7 @@ class Bullet(ListenSprite):
 		self.points = 0
 	
 	@property
-	def shown_image(self):
+	def image(self):
 		return self.img
 
 	def update(self):
@@ -656,7 +703,6 @@ class ObjLoader(object):
 		"""
 		new_obj = objtype(**kwargs)
 		allqueue.add(new_obj)
-
 
 
 class Starfield(object):
@@ -717,7 +763,6 @@ class Starfield(object):
 				star[1] = SCREENHEIGHT + speed if star[1] <= 0 else 0 - speed
  
 
-
 class StatKeeper(object):
 	def __init__(self):
 		self.storage = {}
@@ -758,11 +803,33 @@ class StatKeeper(object):
 #		self.color = YELLOW		#not-so-great with sprites.
 #		self.speed = 3
 
+class Scene(object):
+	def __init__(self):
+		self._did_call_enter = False
+	
+	def enter(self, *args, **kwargs):
+		pass
+	
+	def main(self, *args, **kwargs):
+		pass
+		
+	def exit(self, *args, **kwargs):
+		pass
+		
+	def go(self, *args, **kwargs):
+		if self._did_call_enter == False:
+			self.enter(*args, **kwargs)
+			self._did_call_enter = True
+		step = self.main(*args, **kwargs)
+		if not step:
+			self.exit(*args, **kwargs)
+		return step
 
 class GameScene(Scene):
 	def __init__(self):
 		super(GameScene, self).__init__()
 		self.allq = pygame.sprite.Group()
+		self.spriteq = pygame.sprite.Group()
 		self.textq = pygame.sprite.Group()
 		add_observer(self, 'made_like_object')
 		add_observer(self, 'made_object')
@@ -775,13 +842,18 @@ class GameScene(Scene):
 		new_obj = objtype(**kwargs)
 		for group in sender.groups():
 			group.add(new_obj)
+		self.add_obj(new_obj)
 			
 	def made_object(self, sender, objtype, **kwargs):
 		"""Creates new object and places it 
 		just in the allqueue.
 		"""
 		new_obj = objtype(**kwargs)
-		self.allq.add(new_obj)
+		self.add_obj(new_obj)
+		
+	def add_obj(self, *news):
+		for new_obj in news:
+			new_obj.add(self.allq, self.textq if isinstance(new_obj, TextObj) else self.spriteq)
 		
 	def exit(self, *args):
 		for obj in [self] + self.allq.sprites() + self.textq.sprites():
@@ -800,7 +872,7 @@ class IntroScene(GameScene):
 		menu_list = 'Press any key to play#Mouse moves ship#10-keypad fires in 8 directions'.split('#')
 		menuObj = MultiText(0, 0, menu_list, GREEN, self.menu_font, (FPS * 1.15))
 		menuObj.pin_at('center', (SCREENWIDTH / 2, (SCREENHEIGHT / 2) + 100))
-		self.allq.add(titleObj, menuObj)
+		self.add_obj(titleObj, menuObj)
 	
 	def main(self, events):
 		for event in events:
@@ -838,7 +910,7 @@ class LevelScene(GameScene):
 		
 		level_text.pin_at('center', (SCREENWIDTH / 2, SCREENHEIGHT / 20))
 		gameover_text.pin_at('center', (SCREENWIDTH / 2, SCREENHEIGHT / 2))
-		gameover_text.visible = False
+		gameover_text.hide()
 		
 		score_num.ship_set_score = score_num.set_text
 		score_num.sub('ship_set_score')
@@ -848,17 +920,16 @@ class LevelScene(GameScene):
 		level_text.sub('set_lvl_txt')
 		gameover_text.gameover_show = gameover_text.show
 		gameover_text.sub('gameover_show')
-		add_observer(self, 'made_object')
-		add_observer(self, 'made_like_object')
 		
 		halfX, halfY = DISPLAYSURF.get_rect().center
 		pygame.mouse.set_pos([halfX, halfY])
 		
 		self.player = Player(halfX, halfY)
-		self.player.add(self.goodq, self.allq)
-		self.textq.add(score_text, score_num, lives_text, 
-						lives_num, level_text, gameover_text)
-		self.allq.add(PlayerMouse(halfX, halfY, bound_to=self.player))
+		PlayerSights = PlayerMouse(halfX, halfY, bound_to=self.player)
+		self.add_obj(score_text, score_num, lives_text, 
+					lives_num, level_text, gameover_text, 
+					self.player, PlayerSights)
+		self.goodq.add(self.player)
 	
 	def setup(self):
 		world, stage = [i + 1 for i in divmod(self.lvl, 4)]
@@ -884,7 +955,8 @@ class LevelScene(GameScene):
 			NewEnemy = random.choice(kinds_of_AI)(x=random.choice(safex), y=random.choice(safey))
 			NewEnemy.speed = int(math.floor(NewEnemy.speed * (1.05 ** variance)))
 			NewEnemy.points = int(math.floor(NewEnemy.points + ((NewEnemy.points / 10) * variance)))
-			NewEnemy.add(self.badq, self.allq)
+			NewEnemy.add(self.badq)
+			self.add_obj(NewEnemy)
 		if stage % 4 == 1 and world > 1:
 			publish('new_direction')
 			
@@ -910,16 +982,17 @@ class LevelScene(GameScene):
 						self.state = 'paused'
 					else:
 						self.player.handle_key(event.key)
-			hit_list = pygame.sprite.groupcollide(self.goodq, self.badq, False, False)
-			for goodguy, badguys in hit_list.iteritems():
-				if goodguy is not self.player:
-					for baddie in badguys:
+			for goodguy in self.goodq:
+				hit_dict = goodguy.hit_rect.collidedict({b:b.hit_rect for b in self.badq})
+				if hit_dict:
+					baddie = hit_dict[0]
+					if goodguy is not self.player:
 						baddie.got_hit()
 						if baddie not in self.badq and baddie.points:
 							self.player.score += baddie.points
-				goodguy.got_hit()
+					goodguy.got_hit()
 			if not self.player.lives:
-				publish('gameover_show')
+				publish('gameover_show', 180)
 				self.state = 'gameover'
 			elif not self.badq:
 				self.lvl += 1
@@ -948,7 +1021,7 @@ class GameOverScene(GameScene):
 		congratsText = TextObj(0, 0, 'High score!  Enter your name, frunk destroyer.', GREEN, GAMEFONT)
 		congratsText.pin_at('center', (SCREENWIDTH / 2, SCREENHEIGHT / 10))
 		
-		self.textq.add(playerInitials, congratsText)
+		self.add_obj(playerInitials, congratsText)
 		pygame.mixer.music.load(path.join('sounds', 'gameover.wav'))
 		pygame.mixer.music.set_volume(0.1)
 		pygame.mixer.music.play(-1)
@@ -960,7 +1033,7 @@ class GameOverScene(GameScene):
 			scorecolor = [int(c * colormod) for c in (50, 250, 50)]
 			initialText = TextObj(nextX, nextY, name_score[0], scorecolor, GAMEFONT)
 			hiscoreText = TextObj(nextX * 2, nextY, name_score[1], scorecolor, GAMEFONT)
-			self.textq.add(initialText, hiscoreText)
+			self.add_obj(initialText, hiscoreText)
 			
 	def main(self, events):
 		"""Gets initials if you earned a hi-score. Displays scores."""
@@ -995,7 +1068,7 @@ class GameOverScene(GameScene):
 				scorecolor = [int(c * colormod) for c in (50, 250, 50)]
 				initialText = TextObj(nextX, nextY, name_score[0], scorecolor, GAMEFONT)
 				hiscoreText = TextObj(nextX * 2, nextY, name_score[1], scorecolor, GAMEFONT)
-				self.textq.add(initialText, hiscoreText)
+				self.add_obj(initialText, hiscoreText)
 			self.state = 'show_scores'
 		self.allq.update()
 		return True
@@ -1018,10 +1091,8 @@ def SceneLoop():
 			if i >= len(scenes):
 				i = 0
 			current_scene = scenes[i]()
-		for obj in current_scene.allq:
-			obj.draw()
-		for obj in current_scene.textq:
-			obj.draw()
+		current_scene.spriteq.draw(DISPLAYSURF)
+		current_scene.textq.draw(DISPLAYSURF)
 		pygame.display.flip()
 		FPSCLOCK.tick(FPS)
 
