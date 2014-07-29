@@ -143,7 +143,6 @@ class ListenSprite(pygame.sprite.Sprite):
 		self.direction = [0, 0]
 		self.target = [0, 0]
 		self.speed = 0
-		self.visible = True
 		self.blank_surf = self.set_blank_surf()
 		
 	def set_blank_surf(self):
@@ -178,6 +177,10 @@ class ListenSprite(pygame.sprite.Sprite):
 	def pos(self, xy):
 		self._xy = xy
 		self.rect.center = self._xy
+	
+	@property
+	def visible(self):
+		return True
 		
 	@property
 	def image(self):
@@ -223,10 +226,6 @@ class ListenSprite(pygame.sprite.Sprite):
 	def rect(self):
 		return self.image.get_rect(center=self.pos)
 
-	def draw(self):
-		if self.visible:
-			DISPLAYSURF.blit(self.image, self.image.get_rect(center=self.pos))
-
 	def sub(self, message):
 		add_observer(self, message)
 
@@ -270,6 +269,12 @@ class TextObj(ListenSprite):
 		self.pinned_to = ('center', self.pos)
 		self.to_blit = self.set_to_blit()
 		super(TextObj, self).__init__(x, y)
+	
+	@property
+	def visible(self):
+		if self.brightness == 0:
+			return False
+		return True
 		
 	def hide(self, delay=1):
 		self.delay = delay
@@ -287,10 +292,7 @@ class TextObj(ListenSprite):
 			self.brightness = int(255 - (255 * effect))
 		else:
 			self.brightness = int(255 * effect)
-		if self.brightness == 0:
-			self.visible = False
-		else:
-			self.visible = True
+		self.to_blit = self.set_to_blit()
 
 	def pin_at(self, corner, coordinates):
 		self.pinned = True
@@ -323,18 +325,10 @@ class TextObj(ListenSprite):
 	def image(self):
 		if self.delay_counter != 0:
 			self.fader()
-			self.to_blit = self.set_to_blit()
 		if self.visible:
-			return self.set_to_blit()
+			return self.to_blit
 		else:
 			return self.blank_surf
-
-	def draw(self):
-		if self.delay_counter != 0:
-			self.fader()
-			self.to_blit = self.set_to_blit()
-		if self.visible:
-			DISPLAYSURF.blit(self.to_blit, self.rect)
 		
 class RiseText(TextObj):
 	"""A TextObj that rises and self-kills when its counter = 0."""
@@ -379,10 +373,19 @@ class Player(ListenSprite):
 		self.speed = 4
 		self.cooldown = 0
 		self.respawn = 0
-		self.visible = True
 		self.lives = 3
 		self.score = 0
 		self.next_extra_guy = 1
+	
+	@property
+	def visible(self):
+		if not self.lives:
+			return False
+		if self.respawn > FPS:
+			return False
+		if FPS > self.respawn > 0:
+			return True if self.respawn % 3 == 1 else False
+		return True
 		
 	def __setattr__(self, k, v):
 		"""Auto-publishes message when listed items are updated.
@@ -391,12 +394,6 @@ class Player(ListenSprite):
 		super(Player, self).__setattr__(k, v)
 		if k in ('score', 'lives'):
 			self.pub('ship_set_{}'.format(k), v)
-		
-	def ready_new_game(self, x, y):
-		"""Gets the ship ready for a new game.
-		Has static values for now, might change this to use variable values.
-		"""
-		self.__init__(x, y)
 
 	def handle_key(self, eventkey):
 		if eventkey in KEY_VAL and self.cooldown == 0:
@@ -407,15 +404,6 @@ class Player(ListenSprite):
 		self.pub('made_like_object', self, Bullet, x=self.x, y=self.y, direction=shotDirection)
 		self.cooldown = 10
 		playerShotSound.play()
-		
-	def is_visible(self):
-		if not self.lives:
-			return False
-		if self.respawn > FPS:
-			return False
-		if FPS > self.respawn > 0:
-			return True if self.respawn % 3 == 1 else False
-		return True
 
 	def update(self):
 		"""Updates ship coordinates. 
@@ -426,7 +414,6 @@ class Player(ListenSprite):
 		self.move_to_target(pygame.mouse.get_pos())
 		self.cooldown -= 1 if self.cooldown > 0 else 0
 		self.respawn -= 1 if self.respawn > 0 else 0
-		self.visible = self.is_visible()
 		if self.score >= (EARNEDEXTRAGUY * self.next_extra_guy):
 			self.lives += 1
 			self.next_extra_guy += 1
@@ -437,13 +424,9 @@ class Player(ListenSprite):
 		self.lives -= 1; if 0, self.kill(). Passes if ship is respawning.
 		"""
 		if self.respawn <= 0:
-			self.respawn = FPS * 2
-			self.cooldown = FPS * 2
-			self.lives -= 1
-			img_rect = self.image.get_rect()
-			halfw = img_rect.width / 2
-			halfh = img_rect.height / 2
-			topX, topY = self.rect.topleft
+			halfw = self.rect.w / 2
+			halfh = self.rect.h / 2
+			topX, topY = self.hit_rect.topleft
 			for index, piece in enumerate([(x, y) for x in (0, halfw) for y in (0, halfh)]):
 				BustedRect = pygame.Rect(piece[0], piece[1], halfw, halfh)
 				bustedX = topX if piece[0] == 0 else topX + halfw
@@ -454,9 +437,11 @@ class Player(ListenSprite):
 							img_piece=self.image.subsurface(BustedRect),
 							direction=DIR_DIAGS[index]
 					)
+			self.respawn = FPS * 2
+			self.cooldown = FPS * 2
+			self.lives -= 1
 			playerDeadSound.play()
 		if not self.lives:
-			self.visible = False
 			self.kill()
 			
 class ShipPiece(ListenSprite):
@@ -471,15 +456,17 @@ class ShipPiece(ListenSprite):
 		if self.visible:
 			return self.img
 		else:
-			blank_rect = self.img.get_rect()
-			blank_surf = pygame.Surface((blank_rect.w, blank_rect.h))
-			blank_surf.set_colorkey(BLACK)
-			return blank_surf
+			return self.blank_surf
+	
+	@property
+	def visible(self):
+		if self.counter % 3 == 1:
+			return True
+		return False
 	
 	def update(self):
 		self.counter -= 1
 		self.move()
-		self.visible = True if self.counter % 3 == 1 else False
 		if self.counter <= 0:
 			self.kill()
 			
@@ -510,10 +497,6 @@ class PlayerMouse(ListenSprite):
 		
 	def update(self):
 		self.pos = pygame.mouse.get_pos()
-		
-	def draw(self):
-		if self.bound_to.visible and not self.rect.colliderect(self.bound_to.rect):
-			pygame.draw.rect(DISPLAYSURF, self.color, self.rect, 1)
 
 
 class Enemy(ListenSprite):
@@ -622,16 +605,18 @@ class Teleporter(Enemy):
 		self.widex = range(self.xlane[0], self.xlane[-1])
 		self.widey = range(self.ylane[0], self.ylane[-1])
 	
+	@property
+	def visible(self):
+		if self.counter % 5 or self.counter in xrange((FPS / 2), (FPS * 2)):
+			return True
+		return False
+	
 	def update(self):
 		self.move()
 		self.shot_check()
 		if is_out_of_bounds(self.pos):
 			self.bounce()
 		self.counter -= 1
-		if self.counter % 5 or self.counter in xrange((FPS / 2), (FPS * 2)):
-			self.visible = True
-		else:
-			self.visible = False
 		if self.counter <= 0:
 			if coinflip():
 				self.x = random.choice(self.xlane)
@@ -831,8 +816,12 @@ class GameScene(Scene):
 		self.allq = pygame.sprite.Group()
 		self.spriteq = pygame.sprite.Group()
 		self.textq = pygame.sprite.Group()
+		self.visuals = self.spriteq, self.textq
 		add_observer(self, 'made_like_object')
 		add_observer(self, 'made_object')
+	
+	def get_visuals(self):
+		return (self.spriteq, self.textq)
 		
 	def made_like_object(self, sender, objtype, **kwargs):
 		"""Creates new object and places it in
@@ -1080,19 +1069,17 @@ def SceneLoop():
 	i = 0
 	current_scene = scenes[i]()
 	while True:
-		DISPLAYSURF.fill(BLACK)
-		BGStars.update()
 		events = pygame.event.get()
 		for event in events:
 			if event.type == pygame.QUIT:
 				return False
 		if not current_scene.go(events):
-			i += 1
-			if i >= len(scenes):
-				i = 0
+			i = 0 if i + 1 >= len(scenes) else i + 1
 			current_scene = scenes[i]()
-		current_scene.spriteq.draw(DISPLAYSURF)
-		current_scene.textq.draw(DISPLAYSURF)
+		DISPLAYSURF.fill(BLACK)
+		BGStars.update()
+		for x in current_scene.visuals:
+			x.draw(DISPLAYSURF)
 		pygame.display.flip()
 		FPSCLOCK.tick(FPS)
 
