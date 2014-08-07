@@ -272,13 +272,13 @@ class TextObj(ListenSprite):
 	
 	@property
 	def pinned(self):
-		if getattr(self, 'pinned_to', False) is not False:
+		if getattr(self, 'pinned_to', False):
 			return True
 		return False
 	
 	@property
 	def visible(self):
-		return False if self.opacity == 0 else True
+		return self.opacity > 0
 		
 	def hide(self, delay=1):
 		self.delay = delay
@@ -452,7 +452,7 @@ class ShipPiece(ListenSprite):
 	
 	@property
 	def visible(self):
-		return False if self.counter % 2 == 1 else True
+		return not self.counter % 2 == 1
 	
 	def update(self):
 		self.counter -= 1
@@ -475,7 +475,7 @@ class PlayerMouse(ListenSprite):
 		
 	@property
 	def visible(self):
-		return True if self.bound_to.visible and not self.rect.colliderect(self.bound_to.rect) else False
+		return self.bound_to.visible and not self.rect.colliderect(self.bound_to.rect)
 		
 	@property
 	def rect(self):
@@ -594,7 +594,7 @@ class Teleporter(Enemy):
 	
 	@property
 	def visible(self):
-		return True if self.counter % 5 or self.counter in xrange((FPS / 2), (FPS * 2)) else False
+		return (FPS/2) < self.counter < (FPS*2) or not self.counter % 3 == 1
 	
 	def update(self):
 		self.move()
@@ -755,7 +755,6 @@ class Scene(object):
 	def exit(self, *args, **kwargs):
 		pass
 		
-	#def go(self, *args, **kwargs):
 	def __call__(self, *args, **kwargs):
 		if self._did_call_enter == False:
 			self.enter(*args, **kwargs)
@@ -797,7 +796,6 @@ class GameScene(Scene):
 		
 	def add_obj(self, *news):
 		for new_obj in news:
-			#new_obj.add(self.allq, self.textq if isinstance(new_obj, TextObj) else self.spriteq)
 			target_qs = [self.allq]
 			if isinstance(new_obj, TextObj):
 				target_qs.append(self.textq)
@@ -826,7 +824,7 @@ class IntroScene(GameScene):
 	
 	def main(self, events):
 		for event in events:
-			if event.type == pygame.KEYDOWN: #prepare for new game
+			if event.type == pygame.KEYDOWN:
 				return False
 		self.allq.update()
 		return True
@@ -1042,47 +1040,37 @@ class Screen(object):
 		self.view.fill(self.bgcolor)
 		self.bg.update()
 		for queue in visuals:
-			#queue.draw(self.view)
 			for sprite in queue.sprites():
 				if sprite.visible:
 					image_rect = [sprite.image, sprite.rect]
-					if hasattr(sprite, 'opacity'):
-						if sprite.opacity is not 255:
-							NewSurf = pygame.Surface((image_rect[1].w, image_rect[1].h))
-							NewSurf.fill(BLACK)
-							NewSurf.blit(image_rect[0], (0, 0))
-							NewSurf.set_alpha(sprite.opacity)
-							image_rect[0] = NewSurf
-					if sprite.do_rotate is not False:
-						#new_img = rotate_img(image_rect[0], -90 - math.degrees(math.atan2(sprite.direction[1], sprite.direction[0])))
+					if getattr(sprite, 'opacity', 255) is not 255:
+						NewSurf = pygame.Surface((image_rect[1].w, image_rect[1].h))
+						NewSurf.fill(BLACK)
+						NewSurf.blit(image_rect[0], (0, 0))
+						NewSurf.set_alpha(sprite.opacity)
+						image_rect[0] = NewSurf
+					if getattr(sprite, 'do_rotate', False):
 						new_img = self.rotate_img(image_rect[0], sprite.direction)
-						new_rect = new_img.get_rect(center=sprite.pos)
-						image_rect = [new_img, new_rect]
+						image_rect = [new_img, new_img.get_rect(center=sprite.pos)]
 					self.view.blit(*image_rect)
 		self.actor.flip()
-		
-#DISPLAYSURF = pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
-#pygame.display.set_caption('Space Frunks')
-#pygame.mouse.set_visible(0)
-
 
 def GameLoop():
 	FPSCLOCK = pygame.time.Clock()
 	Keeper = StatKeeper()
 	View = Screen(640, 480)
 	scenes = (IntroScene, LevelScene, GameOverScene)
-	i = 0
-	current_scene = scenes[i]()
 	while True:
-		events = pygame.event.get()
-		for event in events:
-			if event.type == pygame.QUIT:
-				return False
-		if not current_scene(events):
-			i = 0 if i + 1 >= len(scenes) else i + 1
-			current_scene = scenes[i]()
-		View.draw_all(current_scene.visuals)
-		FPSCLOCK.tick(FPS)
+		for scene in scenes:
+			current_scene = scene()
+			events = []
+			while current_scene(events):
+				View.draw_all(current_scene.visuals)
+				FPSCLOCK.tick(FPS)
+				events = pygame.event.get()
+				for e in events:
+					if e.type == pygame.QUIT:
+						return False
 
 if __name__ == "__main__":
 	GameLoop()
