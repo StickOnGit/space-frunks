@@ -272,9 +272,7 @@ class TextObj(ListenSprite):
 	
 	@property
 	def pinned(self):
-		if getattr(self, 'pinned_to', False):
-			return True
-		return False
+		return getattr(self, 'pinned_to', False)
 	
 	@property
 	def visible(self):
@@ -283,34 +281,22 @@ class TextObj(ListenSprite):
 	def hide(self, delay=1):
 		self.delay = delay
 		self.delay_counter = delay
+		#print "=={}==hide".format(self.delay)
 	
 	def show(self, delay=1):
 		self.delay = -1 * delay
 		self.delay_counter = -1 * delay
-	
-	def fader(self):
-		self.delay_counter -= 1 if self.delay_counter > 0 else -1
-		effect = float(self.delay_counter) / self.delay
-		if not 255 >= effect >= 0:
-			effect = 0 if effect < 0 else 255
-		if self.delay_counter < 0:
-			self.opacity = int(255 - (255 * effect))
-		else:
-			self.opacity = int(255 * effect)
+		#print "=={}==show".format(self.delay)
 
 	def pin_at(self, corner, coordinates):
 		self.pinned_to = (corner, coordinates)
 	
 	def set_text(self, text):
 		self.text = str(text)
-		self.image = self.font.render(self.text, True, self.color)
+		self.image = self.set_to_blit()
 
-	def set_to_blit(self):
-		return self.font.render(self.text, True, self.color)
-	
-	def update(self):
-		if self.delay_counter != 0:
-			self.fader()
+	def set_to_blit(self, newtext=None):
+		return self.font.render(newtext or self.text, True, self.color)
 
 	@property
 	def rect(self):
@@ -395,8 +381,7 @@ class Player(ListenSprite):
 		playerShotSound.play()
 
 	def update(self):
-		"""Updates ship coordinates. 
-		Uses move_to_target to follow the mouse.
+		"""Uses move_to_target to follow the mouse.
 		Counts cooldown and respawn to 0 when needed
 		and checks its point total for extra lives.
 		"""
@@ -409,9 +394,7 @@ class Player(ListenSprite):
 			self.pub('made_object', self, RiseText, x=self.x, y=self.y, color=(50, 200, 50), text='1UP')
 
 	def got_hit(self):
-		"""Hook for controller's got_hit() call. 
-		self.lives -= 1; if 0, self.kill(). Passes if ship is respawning.
-		"""
+		"""self.lives -= 1; if 0, self.kill(). Passes if ship is respawning."""
 		if self.respawn <= 0:
 			halfw = self.rect.w / 2
 			halfh = self.rect.h / 2
@@ -744,25 +727,20 @@ class StatKeeper(object):
 
 class Scene(object):
 	def __init__(self):
-		self._did_call_enter = False
+		pass
+		#self._did_call_enter = False
 	
-	def enter(self, *args, **kwargs):
+	def __enter__(self, *args, **kwargs):
 		pass
 	
 	def main(self, *args, **kwargs):
 		pass
 		
-	def exit(self, *args, **kwargs):
+	def __exit__(self, *args, **kwargs):
 		pass
 		
 	def __call__(self, *args, **kwargs):
-		if self._did_call_enter == False:
-			self.enter(*args, **kwargs)
-			self._did_call_enter = True
-		step = self.main(*args, **kwargs)
-		if not step:
-			self.exit(*args, **kwargs)
-		return step
+		return self.main(*args, **kwargs)
 
 class GameScene(Scene):
 	def __init__(self):
@@ -803,7 +781,7 @@ class GameScene(Scene):
 				target_qs.append(self.spriteq)
 			new_obj.add(*target_qs)
 		
-	def exit(self, *args):
+	def __exit__(self, *args):
 		for obj in [self] + self.allq.sprites() + self.textq.sprites():
 			rm_from_all(obj)
 		
@@ -813,7 +791,7 @@ class IntroScene(GameScene):
 		self.title_font = pygame.font.Font('freesansbold.ttf', 32)
 		self.menu_font = pygame.font.Font('freesansbold.ttf', 18)
 		
-	def enter(self, *args):
+	def __enter__(self, *args):
 		titleObj = TextObj(0, 0, 'Space Frunks', GREEN, self.title_font)
 		titleObj.pin_at('center', (SCREENWIDTH / 2, (SCREENHEIGHT / 2) - 100))
 		
@@ -821,6 +799,7 @@ class IntroScene(GameScene):
 		menuObj = MultiText(0, 0, menu_list, GREEN, self.menu_font, (FPS * 1.15))
 		menuObj.pin_at('center', (SCREENWIDTH / 2, (SCREENHEIGHT / 2) + 100))
 		self.add_obj(titleObj, menuObj)
+		return self
 	
 	def main(self, events):
 		for event in events:
@@ -841,7 +820,7 @@ class LevelScene(GameScene):
 		self.gameover_font = pygame.font.Font('freesansbold.ttf', 36)
 		self.go_to_gameover = FPS * 3
 		
-	def enter(self, *args):
+	def __enter__(self, *args):
 		score_text = TextObj(0, 0, 'Score:', WHITE, self.score_font)
 		score_num = TextObj(0, 0, publish_with_results('give', 'last_score')[0], WHITE, self.score_font)
 		lives_text = TextObj(0, 0, 'Lives:', WHITE, self.score_font)
@@ -868,8 +847,9 @@ class LevelScene(GameScene):
 		level_text.sub('set_lvl_txt')
 		gameover_text.gameover_show = gameover_text.show
 		gameover_text.sub('gameover_show')
+		gameover_text.gameover_hide = gameover_text.hide
+		gameover_text.sub('gameover_hide')
 		
-		#halfX, halfY = DISPLAYSURF.get_rect().center
 		halfX, halfY = pygame.display.get_surface().get_rect().center
 		pygame.mouse.set_pos([halfX, halfY])
 		
@@ -879,6 +859,7 @@ class LevelScene(GameScene):
 					lives_num, level_text, gameover_text, 
 					self.player, PlayerSights)
 		self.goodq.add(self.player)
+		return self
 	
 	def setup(self):
 		world, stage = [i + 1 for i in divmod(self.lvl, 4)]
@@ -911,6 +892,10 @@ class LevelScene(GameScene):
 			
 	def main(self, events):
 		if self.state == 'gameover':
+			if self.go_to_gameover in (90, 45):
+				publish('gameover_show', 20)
+			if self.go_to_gameover in (78, 23):
+				publish('gameover_hide', 20)
 			self.go_to_gameover -= 1
 			if self.go_to_gameover <= 0:
 				publish('save', 'last_score', self.player.score)
@@ -941,7 +926,6 @@ class LevelScene(GameScene):
 							if badguy not in self.badq and badguy.points:
 								self.player.score += badguy.points
 			if not self.player.lives:
-				publish('gameover_show', 180)
 				self.state = 'gameover'
 			elif not self.badq:
 				self.lvl += 1
@@ -956,7 +940,7 @@ class GameOverScene(GameScene):
 		self.player_initials = ''
 		self.ship_score = publish_with_results('give', 'last_score')[0] or 0
 		
-	def enter(self, *args):
+	def __enter__(self, *args):
 		pygame.event.get()					#get() empties event queue
 		
 		if self.ship_score > scoreList[-1][1]:
@@ -974,6 +958,7 @@ class GameOverScene(GameScene):
 		pygame.mixer.music.load(path.join('sounds', 'gameover.wav'))
 		pygame.mixer.music.set_volume(0.1)
 		pygame.mixer.music.play(-1)
+		return self
 		
 	def build_score_list(self):
 		for index, name_score in enumerate(scoreList):
@@ -1023,15 +1008,24 @@ class GameOverScene(GameScene):
 		return True
 
 class Screen(object):
-	def __init__(self, height, width, bg=None, bgcolor=BLACK):
-		self.actor = pygame.display
-		self.view = self.actor.set_mode((height, width))
+	def __init__(self, title='Space Frunks', bg=None, bgcolor=BLACK):
+		self.view = pygame.display.get_surface()
 		self.bg = bg or Starfield()
 		self.bgcolor = bgcolor or BLACK
-		self.actor.set_caption('Space Frunks')
+		pygame.display.set_caption(title)
 		
 	def rotate_img(self, img, direction):
 		return pygame.transform.rotate(img, -90 - math.degrees(math.atan2(direction[1], direction[0])))
+	
+	def fade_img(self, sprite):
+		tick = sprite.delay_counter / abs(sprite.delay_counter)
+		if sprite.delay_counter != 0:
+			sprite.delay_counter -= tick
+		effect = float(sprite.delay_counter) / (sprite.delay or 1)
+		if tick < 0:
+			sprite.opacity = int(255 - (255 * effect))
+		else:
+			sprite.opacity = int(255 * effect)
 			
 	def draw_bg(self):
 		self.bg.update()
@@ -1041,9 +1035,11 @@ class Screen(object):
 		self.bg.update()
 		for queue in visuals:
 			for sprite in queue.sprites():
+				if getattr(sprite, 'delay_counter', 0) != 0:
+					self.fade_img(sprite)
 				if sprite.visible:
 					image_rect = [sprite.image, sprite.rect]
-					if getattr(sprite, 'opacity', 255) is not 255:
+					if getattr(sprite, 'opacity', 255) != 255:
 						NewSurf = pygame.Surface((image_rect[1].w, image_rect[1].h))
 						NewSurf.fill(BLACK)
 						NewSurf.blit(image_rect[0], (0, 0))
@@ -1053,26 +1049,26 @@ class Screen(object):
 						new_img = self.rotate_img(image_rect[0], sprite.direction)
 						image_rect = [new_img, new_img.get_rect(center=sprite.pos)]
 					self.view.blit(*image_rect)
-		self.actor.flip()
+		pygame.display.flip()
 
 def GameLoop():
 	FPSCLOCK = pygame.time.Clock()
 	Keeper = StatKeeper()
-	View = Screen(640, 480)
-	scenes = (IntroScene, LevelScene, GameOverScene)
+	View = Screen()
+	AllScenes = (IntroScene, LevelScene, GameOverScene)
 	while True:
-		for scene in scenes:
-			current_scene = scene()
-			events = []
-			while current_scene(events):
-				View.draw_all(current_scene.visuals)
-				FPSCLOCK.tick(FPS)
-				events = pygame.event.get()
-				for e in events:
-					if e.type == pygame.QUIT:
-						return False
+		for Seene in AllScenes:
+			with Seene() as CurrentScene:
+				events = []
+				while CurrentScene(events):
+					View.draw_all(CurrentScene.visuals)
+					FPSCLOCK.tick(FPS)
+					events = pygame.event.get()
+					for e in events:
+						if e.type == pygame.QUIT:
+							return False
 
 if __name__ == "__main__":
 	GameLoop()
-	print " - fin -"
+	#print " - fin -"
 	sys.exit(pygame.quit())
