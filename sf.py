@@ -14,6 +14,7 @@ import spritesheet
 import math
 from tenfwd import add_observer, rm_observer, rm_from_all, publish, publish_with_results, Obvs
 from os import path
+from weakref import WeakKeyDictionary
 try:
 	import cPickle as pickle
 except:
@@ -278,15 +279,21 @@ class TextObj(ListenSprite):
 	def visible(self):
 		return self.opacity > 0
 		
-	def hide(self, delay=1):
-		self.delay = delay
-		self.delay_counter = delay
-		#print "=={}==hide".format(self.delay)
+	def hide(self, delay=1, target=0):
+		#self.delay = delay
+		#self.delay_counter = delay
+		#self.fx_step = delay
+		#self.fx_state.append('hide:{}'.format(target))
+		self.pub('add_to_fade_q', self, self.opacity, target, delay)
+		##print "=={}==hide".format(self.delay)
 	
-	def show(self, delay=1):
-		self.delay = -1 * delay
-		self.delay_counter = -1 * delay
-		#print "=={}==show".format(self.delay)
+	def show(self, delay=1, target=255):
+		#self.delay = -1 * delay
+		#self.delay_counter = -1 * delay
+		#self.fx_step = delay
+		#self.fx_state.append('show:{}'.format(target))
+		self.pub('add_to_fade_q', self, self.opacity, target, delay)
+		##print "=={}==show".format(self.delay)
 
 	def pin_at(self, corner, coordinates):
 		self.pinned_to = (corner, coordinates)
@@ -728,7 +735,6 @@ class StatKeeper(object):
 class Scene(object):
 	def __init__(self):
 		pass
-		#self._did_call_enter = False
 	
 	def __enter__(self, *args, **kwargs):
 		pass
@@ -974,7 +980,6 @@ class GameOverScene(GameScene):
 		if self.state == 'show_scores':
 			for event in events:
 				if event.type == pygame.KEYDOWN:
-					pygame.mixer.music.stop()
 					return False
 		if self.state == 'get_score':
 			for event in events:
@@ -1006,6 +1011,10 @@ class GameOverScene(GameScene):
 			self.state = 'show_scores'
 		self.allq.update()
 		return True
+		
+	def __exit__(self, *args):
+		pygame.mixer.music.stop()
+		super(GameOverScene, self).__exit__(*args)
 
 class Screen(object):
 	def __init__(self, title='Space Frunks', bg=None, bgcolor=BLACK):
@@ -1013,30 +1022,41 @@ class Screen(object):
 		self.bg = bg or Starfield()
 		self.bgcolor = bgcolor or BLACK
 		pygame.display.set_caption(title)
+		self.fade_q = {}
+		add_observer(self, 'add_to_fade_q')
 		
 	def rotate_img(self, img, direction):
 		return pygame.transform.rotate(img, -90 - math.degrees(math.atan2(direction[1], direction[0])))
-	
-	def fade_img(self, sprite):
-		tick = sprite.delay_counter / abs(sprite.delay_counter)
-		if sprite.delay_counter != 0:
-			sprite.delay_counter -= tick
-		effect = float(sprite.delay_counter) / (sprite.delay or 1)
-		if tick < 0:
-			sprite.opacity = int(255 - (255 * effect))
-		else:
-			sprite.opacity = int(255 * effect)
 			
 	def draw_bg(self):
 		self.bg.update()
+		
+	def add_to_fade_q(self, sprite, current, target, frames):
+		step = (target - current) / frames
+		values = (step, target)
+		self.fade_q[sprite] = values
 	
-	def draw_all(self, visuals):
+	def fx_apply(self, sprite):
+		if sprite in self.fade_q:
+			do_del_sprite = False
+			step, target = self.fade_q[sprite]
+			if sprite.opacity != target:
+				sprite.opacity += step
+			else:
+				do_del_sprite = True
+			end, pt = sorted([target, target + step])
+			if end <= sprite.opacity <= pt:
+				sprite.opacity = target
+				do_del_sprite = True
+			if do_del_sprite:
+				del self.fade_q[sprite]
+				
+	def fx_and_draw(self, visuals):
 		self.view.fill(self.bgcolor)
 		self.bg.update()
 		for queue in visuals:
 			for sprite in queue.sprites():
-				if getattr(sprite, 'delay_counter', 0) != 0:
-					self.fade_img(sprite)
+				self.fx_apply(sprite)
 				if sprite.visible:
 					image_rect = [sprite.image, sprite.rect]
 					if getattr(sprite, 'opacity', 255) != 255:
@@ -1057,11 +1077,11 @@ def GameLoop():
 	View = Screen()
 	AllScenes = (IntroScene, LevelScene, GameOverScene)
 	while True:
-		for Seene in AllScenes:
-			with Seene() as CurrentScene:
+		for S in AllScenes:
+			with S() as CurrentScene:
 				events = []
 				while CurrentScene(events):
-					View.draw_all(CurrentScene.visuals)
+					View.fx_and_draw(CurrentScene.visuals)
 					FPSCLOCK.tick(FPS)
 					events = pygame.event.get()
 					for e in events:
@@ -1070,5 +1090,4 @@ def GameLoop():
 
 if __name__ == "__main__":
 	GameLoop()
-	#print " - fin -"
 	sys.exit(pygame.quit())
