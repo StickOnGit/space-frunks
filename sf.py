@@ -24,16 +24,15 @@ pygame.mixer.pre_init(44100, -16, 2, 2048) #fixes sound lag
 pygame.init()
 
 #global variables and syntactic sugar
-SCREENWIDTH = 640
-SCREENHEIGHT = 480
-SCREENDIAG = math.hypot(SCREENWIDTH, SCREENHEIGHT)
+SCR_W = 640
+SCR_H = 480
+SCR_D = math.hypot(SCR_W, SCR_H)
 
 GAMEFONT = pygame.font.Font('freesansbold.ttf', 24)
 FPS = 30
-#FPSCLOCK = pygame.time.Clock()
 
 RED = (255, 0, 0)
-LIGHTRED = (255, 100, 100)
+LITERED = (255, 100, 100)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 PURPLE = (128, 0, 128)
@@ -70,12 +69,10 @@ DIR_DIAGS = [i for i in DIR_VALS if 0 not in i]
 DIR_CROSS = [i for i in DIR_VALS if 0 in i]
 
 STARTINGLEVEL = 0
-EARNEDEXTRAGUY = 5000
+GOT_1UP = 5000
 TESTING = False
 
-#DISPLAYSURF = pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
-pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
-#pygame.display.set_caption('Space Frunks')
+pygame.display.set_mode((SCR_W, SCR_H))
 pygame.mouse.set_visible(0)
 
 try:	#either load hi-score list, or create a default list
@@ -94,8 +91,6 @@ scoreList = [('NOP', 0) for i in range(0, 5)]
 
 #helpful standalone functions that just don't go anywhere in particular yet
 
-rotate_img = pygame.transform.rotate
-
 def load_sound(pathToSound, fileName, volume=0.01):
 	"""Loads sound file from relative path."""
 	newsound = pygame.mixer.Sound(path.join(pathToSound, fileName))
@@ -106,7 +101,7 @@ def coinflip():
 	"""Randomly returns either True or False."""
 	return random.choice((True, False))
 
-def is_out_of_bounds(objXY, offset=15, w=SCREENWIDTH, h=SCREENHEIGHT):
+def is_out_of_bounds(objXY, offset=15, w=SCR_W, h=SCR_H):
 	"""Used to see if an object has gone too far
 	off the screen. Can be optionally passed an 'offset' to alter just how 
 	far off the screen an object can live.
@@ -234,6 +229,12 @@ class ListenSprite(pygame.sprite.Sprite):
 
 	def unsub(self, message):
 		rm_observer(self, message)
+		
+	def hide(self, frames=1, target=0):
+		self.pub('add_to_fade_q', self, self.opacity, target, frames)
+	
+	def show(self, frames=1, target=255):
+		self.pub('add_to_fade_q', self, self.opacity, target, frames)
 
 	def kill(self):
 		rm_from_all(self)
@@ -264,8 +265,6 @@ class TextObj(ListenSprite):
 		self.color = color
 		self.font = font
 		self.opacity = 255
-		self.delay = 0
-		self.delay_counter = 0
 		self.direction = [0, 0]
 		super(TextObj, self).__init__(x, y)
 		self.image = self.font.render(self.text, True, self.color)
@@ -278,32 +277,13 @@ class TextObj(ListenSprite):
 	@property
 	def visible(self):
 		return self.opacity > 0
-		
-	def hide(self, delay=1, target=0):
-		#self.delay = delay
-		#self.delay_counter = delay
-		#self.fx_step = delay
-		#self.fx_state.append('hide:{}'.format(target))
-		self.pub('add_to_fade_q', self, self.opacity, target, delay)
-		##print "=={}==hide".format(self.delay)
-	
-	def show(self, delay=1, target=255):
-		#self.delay = -1 * delay
-		#self.delay_counter = -1 * delay
-		#self.fx_step = delay
-		#self.fx_state.append('show:{}'.format(target))
-		self.pub('add_to_fade_q', self, self.opacity, target, delay)
-		##print "=={}==show".format(self.delay)
 
 	def pin_at(self, corner, coordinates):
 		self.pinned_to = (corner, coordinates)
 	
 	def set_text(self, text):
 		self.text = str(text)
-		self.image = self.set_to_blit()
-
-	def set_to_blit(self, newtext=None):
-		return self.font.render(newtext or self.text, True, self.color)
+		self.image = self.font.render(self.text, True, self.color)
 
 	@property
 	def rect(self):
@@ -314,7 +294,7 @@ class TextObj(ListenSprite):
 		
 class RiseText(TextObj):
 	"""A TextObj that rises and self-kills when its counter = 0."""
-	def __init__(self, x=0, y=0, text='_default_', color=LIGHTRED, font=pygame.font.Font('freesansbold.ttf', 10), counter=45, speed=1, direction=UP):
+	def __init__(self, x=0, y=0, text='_default_', color=LITERED, font=pygame.font.Font('freesansbold.ttf', 10), counter=45, speed=1, direction=UP):
 		super(RiseText, self).__init__(x, y, text, color, font)
 		self.counter = counter
 		self.speed = speed * 2
@@ -395,7 +375,7 @@ class Player(ListenSprite):
 		self.move_to_target(pygame.mouse.get_pos())
 		self.cooldown -= 1 if self.cooldown > 0 else 0
 		self.respawn -= 1 if self.respawn > 0 else 0
-		if self.score >= (EARNEDEXTRAGUY * self.next_extra_guy):
+		if self.score >= (GOT_1UP * self.next_extra_guy):
 			self.lives += 1
 			self.next_extra_guy += 1
 			self.pub('made_object', self, RiseText, x=self.x, y=self.y, color=(50, 200, 50), text='1UP')
@@ -431,14 +411,6 @@ class ShipPiece(ListenSprite):
 		self.counter = int(FPS * 0.75)
 		self.opacity = 127
 		self.do_rotate = False
-		
-	def set_img(self, img):
-		rect_tmp = img.get_rect()
-		NewImg = pygame.Surface((rect_tmp.w, rect_tmp.h))
-		NewImg.fill(BLACK)
-		NewImg.blit(img, rect_tmp)
-		NewImg.set_alpha(127)
-		return NewImg
 	
 	@property
 	def visible(self):
@@ -542,7 +514,7 @@ class Scooter(Enemy):
 		
 		
 class Sweeper(Enemy):
-	def __init__(self, x, y, img=GREENSHIPIMG, max_x=SCREENWIDTH+30, max_y=SCREENHEIGHT+30):
+	def __init__(self, x, y, img=GREENSHIPIMG, max_x=SCR_W+30, max_y=SCR_H+30):
 		super(Sweeper, self).__init__(x, y, img=img)
 		self.min_xy = -30
 		self.max_x = max_x
@@ -569,7 +541,7 @@ class Rammer(Enemy):
 		self.move_to_target(self.origin if ship.respawn else ship.pos)
 		
 class Teleporter(Enemy):
-	def __init__(self, x, y, img=GREENSHIPIMG, leftlane=(15, 40), rightlane=(SCREENWIDTH-40, SCREENWIDTH-15), uplane=(15, 40), downlane=(SCREENHEIGHT-40, SCREENHEIGHT-15)):
+	def __init__(self, x, y, img=GREENSHIPIMG, leftlane=(15, 40), rightlane=(SCR_W-40, SCR_W-15), uplane=(15, 40), downlane=(SCR_H-40, SCR_H-15)):
 		super(Teleporter, self).__init__(x, y, img=img)
 		self.speed = 2 * 2
 		self.points = 200
@@ -619,7 +591,7 @@ class Bullet(ListenSprite):
 	def __init__(self, x, y, direction, img=GOODGUYSHOT, speed=8):
 		super(Bullet, self).__init__(x, y, img=img)
 		self.direction = direction
-		self.range = SCREENDIAG + 20
+		self.range = SCR_D + 20
 		self.counter = 0
 		self.speed = speed * 2
 		self.points = 0
@@ -656,7 +628,7 @@ class Starfield(object):
 		if stars is '_default':
 			stars = self.stars
 		for i in xrange(stars):
-			self.starfield.append([random.randint(0, i) for i in (SCREENWIDTH, SCREENHEIGHT)])
+			self.starfield.append([random.randint(0, i) for i in (SCR_W, SCR_H)])
 			
 	def new_direction(self, dirs=DIR_VALS):
 		self.direction = random.choice([x for x in dirs if x != self.direction])
@@ -684,12 +656,12 @@ class Starfield(object):
 			if random.randint(0, blinkrate) > blinkrate - 1:
 				color = [int(c * .25 * speed) for c in color]
 			pygame.draw.line(pygame.display.get_surface(), color, old_star, star, 1)
-			if not -1 < star[0] < SCREENWIDTH + 1:
-				star[1] = random.randrange(0, SCREENHEIGHT)
-				star[0] = SCREENWIDTH + speed if star[0] <= 0 else 0 - speed
-			if not -1 < star[1] < SCREENHEIGHT + 1:
-				star[0] = random.randrange(0, SCREENWIDTH)
-				star[1] = SCREENHEIGHT + speed if star[1] <= 0 else 0 - speed
+			if not -1 < star[0] < SCR_W + 1:
+				star[1] = random.randrange(0, SCR_H)
+				star[0] = SCR_W + speed if star[0] <= 0 else 0 - speed
+			if not -1 < star[1] < SCR_H + 1:
+				star[0] = random.randrange(0, SCR_W)
+				star[1] = SCR_H + speed if star[1] <= 0 else 0 - speed
  
 
 class StatKeeper(object):
@@ -707,7 +679,7 @@ class StatKeeper(object):
 #def enemy_boomer(self):
 #	"""Comes in from the borders and then blows up for big damages."""
 #	startX, startY = self.origin
-#	if abs(startX - self.x) >= SCREENWIDTH / 2 or abs(startY - self.y) >= SCREENHEIGHT / 2:
+#	if abs(startX - self.x) >= SCR_W / 2 or abs(startY - self.y) >= SCR_H / 2:
 #		self.speed = self.speed - 1 if self.speed > 0 else 0
 #		self.color = tuple([color+15 if color < 230 else 255 for color in self.color])
 #	if self.color == WHITE:
@@ -716,15 +688,15 @@ class StatKeeper(object):
 #			badBullet = Bullet(shotx, shoty, direction)
 #			badBullet.speed = 7
 #			badBullet.range = 50
-#			badBullet.color = LIGHTRED
+#			badBullet.color = LITERED
 #			badqueue.add(badBullet)
 #			allqueue.add(badBullet)
 #		if 'up' in self.direction:
-#			self.y = SCREENHEIGHT + 10
+#			self.y = SCR_H + 10
 #		if 'down' in self.direction:
 #			self.y = -10
 #		if 'left' in self.direction:
-#			self.x = SCREENWIDTH + 10
+#			self.x = SCR_W + 10
 #		if 'right' in self.direction:
 #			self.x = -10
 #			
@@ -799,11 +771,11 @@ class IntroScene(GameScene):
 		
 	def __enter__(self, *args):
 		titleObj = TextObj(0, 0, 'Space Frunks', GREEN, self.title_font)
-		titleObj.pin_at('center', (SCREENWIDTH / 2, (SCREENHEIGHT / 2) - 100))
+		titleObj.pin_at('center', (SCR_W / 2, (SCR_H / 2) - 100))
 		
 		menu_list = 'Press any key to play#Mouse moves ship#10-keypad fires in 8 directions'.split('#')
 		menuObj = MultiText(0, 0, menu_list, GREEN, self.menu_font, (FPS * 1.15))
-		menuObj.pin_at('center', (SCREENWIDTH / 2, (SCREENHEIGHT / 2) + 100))
+		menuObj.pin_at('center', (SCR_W / 2, (SCR_H / 2) + 100))
 		self.add_obj(titleObj, menuObj)
 		return self
 	
@@ -837,12 +809,12 @@ class LevelScene(GameScene):
 		score_num.pin_at('topleft', (score_text.rect.topright[0] + 5, 
 											score_text.rect.topright[1]))
 		
-		lives_text.pin_at('topright', (SCREENWIDTH - (SCREENWIDTH / 19), 15))
+		lives_text.pin_at('topright', (SCR_W - (SCR_W / 19), 15))
 		lives_num.pin_at('topleft', (lives_text.rect.topright[0] + 5, 
 											lives_text.rect.topright[1]))
 		
-		level_text.pin_at('center', (SCREENWIDTH / 2, SCREENHEIGHT / 20))
-		gameover_text.pin_at('center', (SCREENWIDTH / 2, SCREENHEIGHT / 2))
+		level_text.pin_at('center', (SCR_W / 2, SCR_H / 20))
+		gameover_text.pin_at('center', (SCR_W / 2, SCR_H / 2))
 		gameover_text.hide()
 		
 		score_num.ship_set_score = score_num.set_text
@@ -886,8 +858,8 @@ class LevelScene(GameScene):
 			kinds_of_AI.append(Rammer)
 		for i in xrange(0, enemies):
 			variance = random.randint(0, world)
-			safex = range(10, (shipX - 25)) + range((shipX + 25), (SCREENWIDTH - 10))
-			safey = range(10, (shipY - 25)) + range((shipY + 25), (SCREENHEIGHT - 10))
+			safex = range(10, (shipX - 25)) + range((shipX + 25), (SCR_W - 10))
+			safey = range(10, (shipY - 25)) + range((shipY + 25), (SCR_H - 10))
 			NewEnemy = random.choice(kinds_of_AI)(x=random.choice(safex), y=random.choice(safey))
 			NewEnemy.speed = int(math.floor(NewEnemy.speed * (1.05 ** variance)))
 			NewEnemy.points = int(math.floor(NewEnemy.points + ((NewEnemy.points / 10) * variance)))
@@ -953,12 +925,12 @@ class GameOverScene(GameScene):
 			self.state = 'get_score'
 		
 		playerInitials = TextObj(0, 0, '', WHITE, GAMEFONT)
-		playerInitials.pin_at('center', (SCREENWIDTH / 2, SCREENHEIGHT / 2))
+		playerInitials.pin_at('center', (SCR_W / 2, SCR_H / 2))
 		playerInitials.got_initial = playerInitials.set_text
 		playerInitials.sub('got_initial')
 		
 		congratsText = TextObj(0, 0, 'High score!  Enter your name, frunk destroyer.', GREEN, GAMEFONT)
-		congratsText.pin_at('center', (SCREENWIDTH / 2, SCREENHEIGHT / 10))
+		congratsText.pin_at('center', (SCR_W / 2, SCR_H / 10))
 		
 		self.add_obj(playerInitials, congratsText)
 		pygame.mixer.music.load(path.join('sounds', 'gameover.wav'))
@@ -968,8 +940,8 @@ class GameOverScene(GameScene):
 		
 	def build_score_list(self):
 		for index, name_score in enumerate(scoreList):
-			nextX, nextY = (SCREENWIDTH / 3, ((SCREENHEIGHT + 150) / 8) * (index + 1))
-			colormod = (1.0 - float(nextY) / SCREENHEIGHT)
+			nextX, nextY = (SCR_W / 3, ((SCR_H + 150) / 8) * (index + 1))
+			colormod = (1.0 - float(nextY) / SCR_H)
 			scorecolor = [int(c * colormod) for c in (50, 250, 50)]
 			initialText = TextObj(nextX, nextY, name_score[0], scorecolor, GAMEFONT)
 			hiscoreText = TextObj(nextX * 2, nextY, name_score[1], scorecolor, GAMEFONT)
@@ -1002,8 +974,8 @@ class GameOverScene(GameScene):
 			for txt in self.textq:
 				txt.kill()
 			for index, name_score in enumerate(scoreList):
-				nextX, nextY = (SCREENWIDTH / 3, ((SCREENHEIGHT + 150) / 8) * (index + 1))
-				colormod = (1.0 - float(nextY) / SCREENHEIGHT)
+				nextX, nextY = (SCR_W / 3, ((SCR_H + 150) / 8) * (index + 1))
+				colormod = (1.0 - float(nextY) / SCR_H)
 				scorecolor = [int(c * colormod) for c in (50, 250, 50)]
 				initialText = TextObj(nextX, nextY, name_score[0], scorecolor, GAMEFONT)
 				hiscoreText = TextObj(nextX * 2, nextY, name_score[1], scorecolor, GAMEFONT)
@@ -1021,8 +993,8 @@ class Screen(object):
 		self.view = pygame.display.get_surface()
 		self.bg = bg or Starfield()
 		self.bgcolor = bgcolor or BLACK
-		pygame.display.set_caption(title)
 		self.fade_q = {}
+		pygame.display.set_caption(title)
 		add_observer(self, 'add_to_fade_q')
 		
 	def rotate_img(self, img, direction):
@@ -1033,30 +1005,24 @@ class Screen(object):
 		
 	def add_to_fade_q(self, sprite, current, target, frames):
 		step = (target - current) / frames
-		values = (step, target)
+		endpt = range(*sorted([target, target + step]))
+		values = (step, target, endpt)
 		self.fade_q[sprite] = values
 	
-	def fx_apply(self, sprite):
-		if sprite in self.fade_q:
-			do_del_sprite = False
-			step, target = self.fade_q[sprite]
-			if sprite.opacity != target:
-				sprite.opacity += step
-			else:
-				do_del_sprite = True
-			end, pt = sorted([target, target + step])
-			if end <= sprite.opacity <= pt:
-				sprite.opacity = target
-				do_del_sprite = True
-			if do_del_sprite:
-				del self.fade_q[sprite]
+	def fade_img(self, sprite):
+		step, target, endpt = self.fade_q[sprite]
+		sprite.opacity += step
+		if sprite.opacity in endpt:
+			sprite.opacity = target
+			del self.fade_q[sprite]
 				
-	def fx_and_draw(self, visuals):
+	def draw_with_fx(self, visuals):
 		self.view.fill(self.bgcolor)
 		self.bg.update()
 		for queue in visuals:
 			for sprite in queue.sprites():
-				self.fx_apply(sprite)
+				if sprite in self.fade_q:
+					self.fade_img(sprite)
 				if sprite.visible:
 					image_rect = [sprite.image, sprite.rect]
 					if getattr(sprite, 'opacity', 255) != 255:
@@ -1081,12 +1047,13 @@ def GameLoop():
 			with S() as CurrentScene:
 				events = []
 				while CurrentScene(events):
-					View.fx_and_draw(CurrentScene.visuals)
+					View.draw_with_fx(CurrentScene.visuals)
 					FPSCLOCK.tick(FPS)
 					events = pygame.event.get()
 					for e in events:
 						if e.type == pygame.QUIT:
 							return False
+						
 
 if __name__ == "__main__":
 	GameLoop()
