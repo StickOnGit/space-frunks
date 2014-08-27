@@ -143,15 +143,16 @@ class ListenSprite(pygame.sprite.Sprite):
 		self._xy = [x, y]
 		self.direction = [0, 0]
 		self.target = [0, 0]
+		self.opacity = 255
 		self.speed = 0
 		self.do_rotate = True
 		self.blank_surf = self.set_blank_surf()
 		
 	def set_blank_surf(self):
-		blank_rect = self.image.get_rect()
-		blank_surf = pygame.Surface((blank_rect.w, blank_rect.h))
-		blank_surf.set_colorkey(BLACK)
-		return blank_surf
+		#blank_surf = pygame.Surface(self.image.get_rect().size)
+		#blank_surf.set_colorkey(BLACK)
+		#return blank_surf
+		return pygame.Surface(self.image.get_rect().size)
 		
 	@property
 	def x(self):
@@ -182,7 +183,11 @@ class ListenSprite(pygame.sprite.Sprite):
 	
 	@property
 	def visible(self):
-		return True
+		return self.opacity > 0
+	
+	@property
+	def rotation(self):
+		return self.direction
 	
 	def set_direction(self, target):
 		self.direction = [i / abs(i) if i != 0 else 0 for i in [a - b for a, b in zip(target, self.pos)]]
@@ -264,7 +269,6 @@ class TextObj(ListenSprite):
 		self.text = str(text)
 		self.color = color
 		self.font = font
-		self.opacity = 255
 		self.direction = [0, 0]
 		super(TextObj, self).__init__(x, y)
 		self.image = self.font.render(self.text, True, self.color)
@@ -273,17 +277,6 @@ class TextObj(ListenSprite):
 	@property
 	def pinned(self):
 		return getattr(self, 'pinned_to', False)
-	
-	@property
-	def visible(self):
-		return self.opacity > 0
-
-	def pin_at(self, corner, coordinates):
-		self.pinned_to = (corner, coordinates)
-	
-	def set_text(self, text):
-		self.text = str(text)
-		self.image = self.font.render(self.text, True, self.color)
 
 	@property
 	def rect(self):
@@ -291,6 +284,17 @@ class TextObj(ListenSprite):
 		if self.pinned:
 			setattr(new_rect, self.pinned_to[0], self.pinned_to[1])
 		return new_rect
+	
+	@property
+	def rotation(self):
+		return [0, 0]
+
+	def pin_at(self, corner, coordinates):
+		self.pinned_to = (corner, coordinates)
+	
+	def set_text(self, text):
+		self.text = str(text)
+		self.image = self.font.render(self.text, True, self.color)
 		
 class RiseText(TextObj):
 	"""A TextObj that rises and self-kills when its counter = 0."""
@@ -347,7 +351,7 @@ class Player(ListenSprite):
 			return False
 		if FPS > self.respawn > 0:
 			return False if self.respawn % 2 == 1 else True
-		return True
+		return self.opacity > 0
 		
 	def __setattr__(self, k, v):
 		"""Auto-publishes message when listed items are updated.
@@ -383,19 +387,18 @@ class Player(ListenSprite):
 	def got_hit(self):
 		"""self.lives -= 1; if 0, self.kill(). Passes if ship is respawning."""
 		if self.respawn <= 0:
-			halfw = self.rect.w / 2
-			halfh = self.rect.h / 2
+			rotato = math.degrees(math.atan2(self.direction[1], self.direction[0]))
+			current_img = pygame.transform.rotate(self.image, -90 - rotato)
+			halfw, halfh = [i / 2 for i in current_img.get_rect().size]
 			topX, topY = self.hit_rect.topleft
 			for index, piece in enumerate([(x, y) for x in (0, halfw) for y in (0, halfh)]):
 				BustedRect = pygame.Rect(piece[0], piece[1], halfw, halfh)
 				bustedX = topX if piece[0] == 0 else topX + halfw
 				bustedY = topY if piece[1] == 0 else topY + halfh
-				self.pub(
-							'made_object', self, ShipPiece, 
-							x=bustedX, y=bustedY,
-							img_piece=self.image.subsurface(BustedRect),
-							direction=DIR_DIAGS[index]
-					)
+				self.pub('made_object', self, ShipPiece, 
+						x=bustedX, y=bustedY,
+						img_piece=current_img.subsurface(BustedRect),
+						direction=DIR_DIAGS[index])
 			self.respawn = FPS * 2
 			self.cooldown = FPS * 2
 			self.lives -= 1
@@ -1025,14 +1028,14 @@ class Screen(object):
 					self.fade_img(sprite)
 				if sprite.visible:
 					image_rect = [sprite.image, sprite.rect]
-					if getattr(sprite, 'opacity', 255) != 255:
+					if sprite.opacity != 255:
 						NewSurf = pygame.Surface((image_rect[1].w, image_rect[1].h))
 						NewSurf.fill(BLACK)
 						NewSurf.blit(image_rect[0], (0, 0))
 						NewSurf.set_alpha(sprite.opacity)
 						image_rect[0] = NewSurf
-					if getattr(sprite, 'do_rotate', False):
-						new_img = self.rotate_img(image_rect[0], sprite.direction)
+					if sprite.do_rotate:
+						new_img = self.rotate_img(image_rect[0], sprite.rotation)
 						image_rect = [new_img, new_img.get_rect(center=sprite.pos)]
 					self.view.blit(*image_rect)
 		pygame.display.flip()
