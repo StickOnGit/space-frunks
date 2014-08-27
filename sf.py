@@ -139,19 +139,15 @@ class ListenSprite(pygame.sprite.Sprite):
 	def __init__(self, x=1, y=1, img=PLAYERSHIPIMG):
 		super(ListenSprite, self).__init__()
 		self.image = img
-		self.drawImg = img
 		self._xy = [x, y]
 		self.direction = [0, 0]
+		self.speed = 0
 		self.target = [0, 0]
 		self.opacity = 255
-		self.speed = 0
 		self.do_rotate = True
 		self.blank_surf = self.set_blank_surf()
 		
 	def set_blank_surf(self):
-		#blank_surf = pygame.Surface(self.image.get_rect().size)
-		#blank_surf.set_colorkey(BLACK)
-		#return blank_surf
 		return pygame.Surface(self.image.get_rect().size)
 		
 	@property
@@ -189,6 +185,20 @@ class ListenSprite(pygame.sprite.Sprite):
 	def rotation(self):
 		return self.direction
 	
+	@property
+	def rect(self):
+		return self.image.get_rect(center=self.pos)
+
+	@property
+	def hit_rect(self):
+		"""Gets the current drawn image's bounding rect,
+		centers it on the current rect, and then replaces
+		the current rect.
+		"""
+		new_rect = self.image.get_bounding_rect()
+		new_rect.center = self.pos
+		return new_rect
+	
 	def set_direction(self, target):
 		self.direction = [i / abs(i) if i != 0 else 0 for i in [a - b for a, b in zip(target, self.pos)]]
 		if not 0 in self.direction:
@@ -211,20 +221,6 @@ class ListenSprite(pygame.sprite.Sprite):
 				self.y = target_pos[1]
 		else:
 			self.pos = target_pos
-
-	@property
-	def hit_rect(self):
-		"""Gets the current drawn image's bounding rect,
-		centers it on the current rect, and then replaces
-		the current rect.
-		"""
-		new_rect = self.image.get_bounding_rect()
-		new_rect.center = self.pos
-		return new_rect
-	
-	@property
-	def rect(self):
-		return self.image.get_rect(center=self.pos)
 
 	def sub(self, message):
 		add_observer(self, message)
@@ -609,6 +605,43 @@ class Bullet(ListenSprite):
 	def got_hit(self):
 		self.kill()
 
+class Star(ListenSprite):
+	def __init__(self, x, y, speed, direction):
+		super(Star, self).__init__(x, y)
+		self.speed = speed
+		self.direction = direction
+		self.do_rotate = False
+		self.image = self.set_image()
+		
+	@property
+	def color(self):
+		new_c = [int(c * self.speed *0.25) for c in (180, 150, 150)]
+		return new_c
+	@property
+	def visible(self):
+		rate = 7 * self.speed
+		#o = 255
+		if random.randint(0, rate) > rate - 1:
+			#o = 255 / 4
+			return False
+		return True
+		#self.opacity = o
+		
+	def set_image(self):
+		new_surf = pygame.Surface((self.speed * 2, self.speed * 2))
+		new_surf.fill(BLACK)
+		temp_rect = new_surf.get_rect()
+		a = temp_rect.center
+		b = [0, 0]
+		for i, p in enumerate(a):
+			b[i] = (a[i] + (self.direction[i] * self.speed))
+		pygame.draw.line(new_surf, self.color, a, b, 1)
+		#print "from {} to {} -> {}".format(a, b, self.direction)
+		return new_surf
+	
+	def update(self):
+		self.move()
+		#self.set_opacity()
 
 class Starfield(object):
 	"""A starfield background. 
@@ -618,9 +651,10 @@ class Starfield(object):
 	"""
 	def __init__(self, stars=50):
 		self.stars = stars
-		self.starfield = []
-		self.add_stars()
+		self.starfield = pygame.sprite.Group()
 		self.direction = DOWN
+		#self.add_stars()
+		self.alt_add_stars()
 		add_observer(self, 'new_direction')
 		
 	def add_stars(self, stars='_default'):
@@ -632,9 +666,18 @@ class Starfield(object):
 			stars = self.stars
 		for i in xrange(stars):
 			self.starfield.append([random.randint(0, i) for i in (SCR_W, SCR_H)])
+	
+	def alt_add_stars(self):
+		for i in range(self.stars):
+			x, y = [random.randint(0, i) for i in (SCR_W, SCR_H)]
+			speed = random.randrange(1, 5)
+			self.starfield.add(Star(x, y, speed, self.direction))
 			
 	def new_direction(self, dirs=DIR_VALS):
 		self.direction = random.choice([x for x in dirs if x != self.direction])
+		for S in self.starfield:
+			S.direction = self.direction
+			S.image = S.set_image()
 
 	def update(self):
 		"""Creates a parallax effect by moving stars at different speeds 
@@ -665,6 +708,16 @@ class Starfield(object):
 			if not -1 < star[1] < SCR_H + 1:
 				star[0] = random.randrange(0, SCR_W)
 				star[1] = SCR_H + speed if star[1] <= 0 else 0 - speed
+	
+	def alt_update(self):
+		for star in self.starfield:
+			star.update()
+			if not -1 < star.x < SCR_W + 1:
+				star.y = random.randrange(0, SCR_H)
+				star.x = SCR_W + star.speed if star.x <= 0 else 0 - star.speed
+			if not -1 < star.y < SCR_H + 1:
+				star.x = random.randrange(0, SCR_W)
+				star.y = SCR_H + star.speed if star.y <= 0 else 0 - star.speed
  
 
 class StatKeeper(object):
@@ -849,10 +902,10 @@ class LevelScene(GameScene):
 		
 		shipX, shipY = [int(i) for i in self.player.pos] #need integers because range() only takes ints
 		possibleAI = {
-						1:[Scooter, Scooter],
-						2:[Scooter, Scooter],
-						3:[Sweeper, Sweeper],
-						4:[Sweeper, Sweeper]
+					1:[Scooter, Scooter],
+					2:[Scooter, Scooter],
+					3:[Sweeper, Sweeper],
+					4:[Sweeper, Sweeper]
 				}
 		kinds_of_AI = possibleAI[stage]
 		if world >= 2:
@@ -874,9 +927,9 @@ class LevelScene(GameScene):
 	def main(self, events):
 		if self.state == 'gameover':
 			if self.go_to_gameover in (90, 45):
-				publish('gameover_show', 20)
+				publish('gameover_show', 45)
 			if self.go_to_gameover in (78, 23):
-				publish('gameover_hide', 20)
+				publish('gameover_hide', 45)
 			self.go_to_gameover -= 1
 			if self.go_to_gameover <= 0:
 				publish('save', 'last_score', self.player.score)
@@ -1009,8 +1062,9 @@ class Screen(object):
 	def add_to_fade_q(self, sprite, current, target, frames):
 		step = (target - current) / frames
 		endpt = range(*sorted([target, target + step]))
-		values = (step, target, endpt)
-		self.fade_q[sprite] = values
+		#values = (step, target, endpt)
+		#self.fade_q[sprite] = values
+		self.fade_q[sprite] = (step, target, endpt)
 	
 	def fade_img(self, sprite):
 		step, target, endpt = self.fade_q[sprite]
@@ -1021,23 +1075,23 @@ class Screen(object):
 				
 	def draw_with_fx(self, visuals):
 		self.view.fill(self.bgcolor)
-		self.bg.update()
-		for queue in visuals:
+		self.bg.alt_update()
+		for queue in (self.bg.starfield,  ) + visuals:
 			for sprite in queue.sprites():
 				if sprite in self.fade_q:
 					self.fade_img(sprite)
 				if sprite.visible:
-					image_rect = [sprite.image, sprite.rect]
+					img_and_rect = [sprite.image, sprite.rect]
 					if sprite.opacity != 255:
-						NewSurf = pygame.Surface((image_rect[1].w, image_rect[1].h))
-						NewSurf.fill(BLACK)
-						NewSurf.blit(image_rect[0], (0, 0))
-						NewSurf.set_alpha(sprite.opacity)
-						image_rect[0] = NewSurf
+						new_img = pygame.Surface(img_and_rect[1].size)
+						new_img.fill(BLACK)
+						new_img.blit(img_and_rect[0], (0, 0))
+						new_img.set_alpha(sprite.opacity)
+						img_and_rect[0] = new_img
 					if sprite.do_rotate:
-						new_img = self.rotate_img(image_rect[0], sprite.rotation)
-						image_rect = [new_img, new_img.get_rect(center=sprite.pos)]
-					self.view.blit(*image_rect)
+						new_img = self.rotate_img(img_and_rect[0], sprite.rotation)
+						img_and_rect = [new_img, new_img.get_rect(center=sprite.pos)]
+					self.view.blit(*img_and_rect)
 		pygame.display.flip()
 
 def GameLoop():
