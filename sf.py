@@ -647,21 +647,10 @@ class Starfield(object):
 		self.stars = stars
 		self.starfield = pygame.sprite.Group()
 		self.direction = DOWN
-		#self.add_stars()
-		self.alt_add_stars()
+		self.add_stars()
 		add_observer(self, 'new_direction')
-		
-	def add_stars(self, stars='_default'):
-		"""Adds X stars to self.starfield, which is just a list.
-		For some reason, an optional value can be passed to this 
-		to add a number of stars besides self.stars.
-		"""
-		if stars is '_default':
-			stars = self.stars
-		for i in xrange(stars):
-			self.starfield.append([random.randint(0, i) for i in (SCR_W, SCR_H)])
 	
-	def alt_add_stars(self):
+	def add_stars(self):
 		for i in range(self.stars):
 			x, y = [random.randint(0, i) for i in (SCR_W, SCR_H)]
 			speed = random.randrange(1, 5)
@@ -672,38 +661,8 @@ class Starfield(object):
 		for S in self.starfield:
 			S.direction = self.direction
 			S.image = S.set_image()
-
-	def update(self):
-		"""Creates a parallax effect by moving stars at different speeds 
-		and with different colors. When a star goes offscreen, 
-		it is given new semi-random values.
-		"""
-		for i, star in enumerate(self.starfield):
-			old_star = star[:]
-			speed = 1
-			color = (120, 70, 70)
-			if i % 3 == 1:
-				speed += 1
-				color = (180, 100, 100)
-			if i % 5 == 1:
-				speed += 1
-				color = (180, 150, 150)
-			for j, p in enumerate(star):
-				star[j] += 2 * speed * self.direction[j]
-			#DRAW STARS BEFORE CHECKING FOR OFFSCREEN.
-			#Otherwise the old and new stars make random diagonal lines.
-			blinkrate = speed * 7
-			if random.randint(0, blinkrate) > blinkrate - 1:
-				color = [int(c * .25 * speed) for c in color]
-			pygame.draw.line(pygame.display.get_surface(), color, old_star, star, 1)
-			if not -1 < star[0] < SCR_W + 1:
-				star[1] = random.randrange(0, SCR_H)
-				star[0] = SCR_W + speed if star[0] <= 0 else 0 - speed
-			if not -1 < star[1] < SCR_H + 1:
-				star[0] = random.randrange(0, SCR_W)
-				star[1] = SCR_H + speed if star[1] <= 0 else 0 - speed
 	
-	def alt_update(self):
+	def update(self):
 		for star in self.starfield:
 			star.update()
 			if not -1 < star.x < SCR_W + 1:
@@ -1026,9 +985,13 @@ class GameOverScene(GameScene):
 			for index, name_score in enumerate(scoreList):
 				nextX, nextY = (SCR_W / 3, ((SCR_H + 150) / 8) * (index + 1))
 				colormod = (1.0 - float(nextY) / SCR_H)
+				#fade_mod = int(255 * colormod)
 				scorecolor = [int(c * colormod) for c in (50, 250, 50)]
+				#scorecolor = (50, 250, 50)
+				#scorecolor[-1] = 25 * index
 				initialText = TextObj(nextX, nextY, name_score[0], scorecolor, GAMEFONT)
 				hiscoreText = TextObj(nextX * 2, nextY, name_score[1], scorecolor, GAMEFONT)
+				#map(lambda x: x.hide(target=fade_mod), (initialText, hiscoreText))
 				self.add_obj(initialText, hiscoreText)
 			self.state = 'show_scores'
 		self.allq.update()
@@ -1067,7 +1030,7 @@ class Screen(object):
 				
 	def draw_with_fx(self, visuals):
 		self.view.fill(self.bgcolor)
-		self.bg.alt_update()
+		self.bg.update()
 		for queue in (self.bg.starfield,  ) + visuals:
 			for sprite in queue.sprites():
 				if sprite in self.fade_q:
