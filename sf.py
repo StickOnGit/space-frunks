@@ -444,7 +444,6 @@ class PlayerMouse(ListenSprite):
 		
 	def update(self):
 		self.pos = pygame.mouse.get_pos()
-		self.image.fill(BLACK)
 		pygame.draw.rect(self.image, [random.randrange(60, 220) for i in (0, 1, 2)], 
 							(0, 0, self.size, self.size), 1)
 
@@ -611,37 +610,32 @@ class Star(ListenSprite):
 		self.speed = speed
 		self.direction = direction
 		self.do_rotate = False
+		self.color = self.set_color()
 		self.image = self.set_image()
 		
 	@property
-	def color(self):
-		new_c = [int(c * self.speed *0.25) for c in (180, 150, 150)]
-		return new_c
-	@property
 	def visible(self):
 		rate = 7 * self.speed
-		#o = 255
 		if random.randint(0, rate) > rate - 1:
-			#o = 255 / 4
 			return False
 		return True
-		#self.opacity = o
+		
+	def set_color(self):
+		new_c = [int(c * self.speed * 0.25) for c in (180, 150, 150)]
+		return new_c
 		
 	def set_image(self):
 		new_surf = pygame.Surface((self.speed * 2, self.speed * 2))
-		new_surf.fill(BLACK)
 		temp_rect = new_surf.get_rect()
 		a = temp_rect.center
 		b = [0, 0]
 		for i, p in enumerate(a):
 			b[i] = (a[i] + (self.direction[i] * self.speed))
 		pygame.draw.line(new_surf, self.color, a, b, 1)
-		#print "from {} to {} -> {}".format(a, b, self.direction)
 		return new_surf
 	
 	def update(self):
 		self.move()
-		#self.set_opacity()
 
 class Starfield(object):
 	"""A starfield background. 
@@ -1062,8 +1056,6 @@ class Screen(object):
 	def add_to_fade_q(self, sprite, current, target, frames):
 		step = (target - current) / frames
 		endpt = range(*sorted([target, target + step]))
-		#values = (step, target, endpt)
-		#self.fade_q[sprite] = values
 		self.fade_q[sprite] = (step, target, endpt)
 	
 	def fade_img(self, sprite):
@@ -1084,7 +1076,6 @@ class Screen(object):
 					img_and_rect = [sprite.image, sprite.rect]
 					if sprite.opacity != 255:
 						new_img = pygame.Surface(img_and_rect[1].size)
-						new_img.fill(BLACK)
 						new_img.blit(img_and_rect[0], (0, 0))
 						new_img.set_alpha(sprite.opacity)
 						img_and_rect[0] = new_img
