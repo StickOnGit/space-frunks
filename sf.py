@@ -260,7 +260,7 @@ class Explosion(ListenSprite):
 			self.kill()
 	
 class TextObj(ListenSprite):
-	def __init__(self, x=0, y=0, text='_default_', color=RED, font=GAMEFONT):
+	def __init__(self, x=0, y=0, text='_default_', color=GREEN, font=GAMEFONT):
 		self._xy = [x, y]
 		self.text = str(text)
 		self.color = color
@@ -739,8 +739,8 @@ class GameScene(Scene):
 		add_observer(self, 'made_like_object')
 		add_observer(self, 'made_object')
 	
-	def get_visuals(self):
-		return (self.spriteq, self.textq)
+	#def get_visuals(self):
+	#	return (self.spriteq, self.textq)
 		
 	def made_like_object(self, sender, objtype, **kwargs):
 		"""Creates new object and places it in
@@ -779,11 +779,12 @@ class IntroScene(GameScene):
 		self.menu_font = pygame.font.Font('freesansbold.ttf', 18)
 		
 	def __enter__(self, *args):
-		titleObj = TextObj(0, 0, 'Space Frunks', GREEN, self.title_font)
+		titleObj = TextObj(text='Space Frunks', font=self.title_font)
 		titleObj.pin_at('center', (SCR_W / 2, (SCR_H / 2) - 100))
 		
 		menu_list = 'Press any key to play#Mouse moves ship#10-keypad fires in 8 directions'.split('#')
-		menuObj = MultiText(0, 0, menu_list, GREEN, self.menu_font, (FPS * 1.15))
+		menuObj = MultiText(all_texts=menu_list, font=self.menu_font, 
+							color=GREEN, switch=(FPS * 1.15))
 		menuObj.pin_at('center', (SCR_W / 2, (SCR_H / 2) + 100))
 		self.add_obj(titleObj, menuObj)
 		return self
@@ -808,12 +809,14 @@ class LevelScene(GameScene):
 		self.go_to_gameover = FPS * 3
 		
 	def __enter__(self, *args):
-		score_text = TextObj(0, 0, 'Score:', WHITE, self.score_font)
-		score_num = TextObj(0, 0, publish_with_results('give', 'last_score')[0], WHITE, self.score_font)
-		lives_text = TextObj(0, 0, 'Lives:', WHITE, self.score_font)
-		lives_num = TextObj(0, 0, publish_with_results('give', 'last_lives')[0], WHITE, self.score_font)
-		level_text = TextObj(0, 0, '', WHITE, self.score_font)
-		gameover_text = TextObj(0, 0, 'G  A  M  E    O  V  E  R', GREEN, self.gameover_font)
+		score_text = TextObj(text='Score:', color=WHITE, font=self.score_font)
+		score_num = TextObj(text=publish_with_results('give', 'last_score')[0], 
+							color=WHITE, font=self.score_font)
+		lives_text = TextObj(text='Lives:', color=WHITE, font=self.score_font)
+		lives_num = TextObj(text=publish_with_results('give', 'last_lives')[0], 
+							color=WHITE, font=self.score_font)
+		level_text = TextObj(text='', color=WHITE, font=self.score_font)
+		gameover_text = TextObj(text='G  A  M  E    O  V  E  R', font=self.gameover_font)
 		score_text.pin_at('topleft', (15, 15))
 		score_num.pin_at('topleft', (score_text.rect.topright[0] + 5, 
 											score_text.rect.topright[1]))
@@ -928,17 +931,15 @@ class GameOverScene(GameScene):
 		self.ship_score = publish_with_results('give', 'last_score')[0] or 0
 		
 	def __enter__(self, *args):
-		pygame.event.get()					#get() empties event queue
-		
 		if self.ship_score > scoreList[-1][1]:
 			self.state = 'get_score'
 		
-		playerInitials = TextObj(0, 0, '', WHITE, GAMEFONT)
+		playerInitials = TextObj(text='', color=WHITE)
 		playerInitials.pin_at('center', (SCR_W / 2, SCR_H / 2))
 		playerInitials.got_initial = playerInitials.set_text
 		playerInitials.sub('got_initial')
 		
-		congratsText = TextObj(0, 0, 'High score!  Enter your name, frunk destroyer.', GREEN, GAMEFONT)
+		congratsText = TextObj(text='High score!  Enter your name, frunk destroyer.')
 		congratsText.pin_at('center', (SCR_W / 2, SCR_H / 10))
 		
 		self.add_obj(playerInitials, congratsText)
@@ -948,13 +949,12 @@ class GameOverScene(GameScene):
 		return self
 		
 	def build_score_list(self):
-		for index, name_score in enumerate(scoreList):
-			nextX, nextY = (SCR_W / 3, ((SCR_H + 150) / 8) * (index + 1))
-			colormod = (1.0 - float(nextY) / SCR_H)
-			scorecolor = [int(c * colormod) for c in (50, 250, 50)]
-			initialText = TextObj(nextX, nextY, name_score[0], scorecolor, GAMEFONT)
-			hiscoreText = TextObj(nextX * 2, nextY, name_score[1], scorecolor, GAMEFONT)
-			self.add_obj(initialText, hiscoreText)
+		for i, name_num in enumerate(scoreList):
+			x, y = (SCR_W / 3, ((SCR_H + 150) / 8) * (i + 1))
+			rgb = (50, 200 - (30 * i), 50)
+			Initials = TextObj(x, y, name_num[0], rgb, GAMEFONT)
+			HiScore = TextObj(x * 2, y, name_num[1], rgb, GAMEFONT)
+			self.add_obj(Initials, HiScore)
 			
 	def main(self, events):
 		"""Gets initials if you earned a hi-score. Displays scores."""
@@ -982,17 +982,12 @@ class GameOverScene(GameScene):
 		if self.state == 'build_scores':
 			for txt in self.textq:
 				txt.kill()
-			for index, name_score in enumerate(scoreList):
-				nextX, nextY = (SCR_W / 3, ((SCR_H + 150) / 8) * (index + 1))
-				colormod = (1.0 - float(nextY) / SCR_H)
-				#fade_mod = int(255 * colormod)
-				scorecolor = [int(c * colormod) for c in (50, 250, 50)]
-				#scorecolor = (50, 250, 50)
-				#scorecolor[-1] = 25 * index
-				initialText = TextObj(nextX, nextY, name_score[0], scorecolor, GAMEFONT)
-				hiscoreText = TextObj(nextX * 2, nextY, name_score[1], scorecolor, GAMEFONT)
-				#map(lambda x: x.hide(target=fade_mod), (initialText, hiscoreText))
-				self.add_obj(initialText, hiscoreText)
+			for i, name_num in enumerate(scoreList):
+				x, y = (SCR_W / 3, ((SCR_H + 150) / 8) * (i + 1))
+				rgb = (50, 200 - (30 * i), 50)
+				Initials = TextObj(x, y, name_num[0], rgb)
+				HiScore = TextObj(x * 2, y, name_num[1], rgb)
+				self.add_obj(Initials, HiScore)
 			self.state = 'show_scores'
 		self.allq.update()
 		return True
@@ -1010,8 +1005,9 @@ class Screen(object):
 		pygame.display.set_caption(title)
 		add_observer(self, 'add_to_fade_q')
 		
-	def rotate_img(self, img, direction):
-		return pygame.transform.rotate(img, -90 - math.degrees(math.atan2(direction[1], direction[0])))
+	def rotate_img(self, img, face):
+		degs = -90 - math.degrees(math.atan2(face[1], face[0]))
+		return pygame.transform.rotate(img, degs)
 			
 	def draw_bg(self):
 		self.bg.update()
@@ -1029,8 +1025,7 @@ class Screen(object):
 			del self.fade_q[sprite]
 				
 	def draw_with_fx(self, visuals):
-		self.view.fill(self.bgcolor)
-		self.bg.update()
+		#self.view.fill(self.bgcolor)
 		for queue in (self.bg.starfield,  ) + visuals:
 			for sprite in queue.sprites():
 				if sprite in self.fade_q:
@@ -1058,6 +1053,8 @@ def GameLoop():
 			with S() as CurrentScene:
 				events = []
 				while CurrentScene(events):
+					View.view.fill(View.bgcolor)
+					View.bg.update()
 					View.draw_with_fx(CurrentScene.visuals)
 					FPSCLOCK.tick(FPS)
 					events = pygame.event.get()
