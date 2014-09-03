@@ -1,27 +1,33 @@
 from collections import defaultdict
 
-Obvs = defaultdict(set)	#dict to hold observers. key:value is "message":set("objects")
+Topics = defaultdict(list)	#dict to hold observers. key:value is "topic":list("objects")
 
 
-def add_observer(obj, message):
-	"""Adds key-value pairs to the Obvs dict.
-	Keys are messages, values are placed in a set."""
-	Obvs[message].add(obj)
+def subscribe(obj, topic):
+	"""Adds key-value pairs to the Topics dict.
+	Keys are topics, values are placed in a list."""
+	if obj not in Topics[topic]:
+		Topics[topic].append(obj)
 	
-def rm_observer(obj, message):
-	"""Removes an observer from a message."""
-	Obvs[message].remove(obj)
+def unsub(obj, topic):
+	"""Removes an observer from a topic."""
+	try:
+		Topics[topic].remove(obj)
+	except ValueError:
+		pass
 	
-def rm_from_all(obj):
-	for message in Obvs:
-		if obj in Obvs[message]:
-			Obvs[message].remove(obj)
+def unsub_all(obj):
+	for topic in Topics:
+		try:
+			Topics[topic].remove(obj)
+		except ValueError:
+			pass
 
-def publish(message, *args, **kwargs):
-	"""Sends message to observers."""
-	for obj in Obvs[message]:
-		getattr(obj, message)(*args, **kwargs)
+def publish(topic, *args, **kwargs):
+	"""Sends topic to observers."""
+	for obj in Topics[topic]:
+		getattr(obj, topic)(*args, **kwargs)
 		
-def publish_with_results(message, *args, **kwargs):
+def publish_with_results(topic, *args, **kwargs):
 	"""Same as publish, but returns list of results."""
-	return [getattr(obj, message)(*args, **kwargs) for obj in Obvs[message]]
+	return [getattr(obj, topic)(*args, **kwargs) for obj in Topics[topic]]

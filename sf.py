@@ -12,7 +12,7 @@ import random
 import sys
 import spritesheet
 import math
-from tenfwd import add_observer, rm_observer, rm_from_all, publish, publish_with_results, Obvs
+from tenfwd import subscribe, unsub, unsub_all, publish, publish_with_results
 from os import path
 from weakref import WeakKeyDictionary
 try:
@@ -106,7 +106,8 @@ def is_out_of_bounds(objXY, offset=15, w=SCR_W, h=SCR_H):
 	off the screen. Can be optionally passed an 'offset' to alter just how 
 	far off the screen an object can live.
 	"""
-	return not ((w + offset) > objXY[0] > (offset * -1) and (h + offset) > objXY[1] > (offset * -1))
+	return not ((w + offset) > objXY[0] > (offset * -1) and 
+				(h + offset) > objXY[1] > (offset * -1))
 	
 def collide_hit_rect(one, two):
 	return one.hit_rect.colliderect(two.hit_rect)
@@ -223,13 +224,13 @@ class ListenSprite(pygame.sprite.Sprite):
 			self.pos = target_pos
 
 	def sub(self, message):
-		add_observer(self, message)
+		subscribe(self, message)
 
 	def pub(self, message, *args, **kwargs):
 		publish(message, *args, **kwargs)
 
 	def unsub(self, message):
-		rm_observer(self, message)
+		unsub(self, message)
 		
 	def hide(self, frames=1, target=0):
 		self.pub('add_to_fade_q', self, self.opacity, target, frames)
@@ -238,7 +239,7 @@ class ListenSprite(pygame.sprite.Sprite):
 		self.pub('add_to_fade_q', self, self.opacity, target, frames)
 
 	def kill(self):
-		rm_from_all(self)
+		unsub_all(self)
 		super(ListenSprite, self).kill()
 
 
@@ -554,7 +555,13 @@ class Teleporter(Enemy):
 	
 	@property
 	def visible(self):
-		return (FPS/2) < self.counter < (FPS*2) or not self.counter % 3 == 1
+		return self.opacity > 0
+		
+	def got_hit(self):
+		if (FPS/2) < self.counter < (FPS*2):
+			return super(Teleporter, self).got_hit()
+		else:
+			pass
 	
 	def update(self):
 		self.move()
@@ -562,6 +569,8 @@ class Teleporter(Enemy):
 		if is_out_of_bounds(self.pos):
 			self.bounce()
 		self.counter -= 1
+		if self.counter == FPS/2:
+			self.hide(frames=FPS/2)
 		if self.counter <= 0:
 			if coinflip():
 				self.x = random.choice(self.xlane)
@@ -582,6 +591,7 @@ class Teleporter(Enemy):
 			new_dirs =[[x, y] for x in picks if x != badx for y in picks if y != bady if [x, y] != [0, 0]]
 			self.direction = random.choice(new_dirs)
 			self.counter = FPS * 3
+			self.show(frames=FPS/2)
 			teleportSound.play()
 
 class Bullet(ListenSprite):
@@ -648,7 +658,7 @@ class Starfield(object):
 		self.starfield = pygame.sprite.Group()
 		self.direction = DOWN
 		self.add_stars()
-		add_observer(self, 'new_direction')
+		subscribe(self, 'new_direction')
 	
 	def add_stars(self):
 		for i in range(self.stars):
@@ -676,8 +686,8 @@ class Starfield(object):
 class StatKeeper(object):
 	def __init__(self):
 		self.storage = {}
-		add_observer(self, 'save')
-		add_observer(self, 'give')
+		subscribe(self, 'save')
+		subscribe(self, 'give')
 		
 	def save(self, k, v):
 		self.storage[k] = v
@@ -736,11 +746,8 @@ class GameScene(Scene):
 		self.spriteq = pygame.sprite.Group()
 		self.textq = pygame.sprite.Group()
 		self.visuals = self.spriteq, self.textq
-		add_observer(self, 'made_like_object')
-		add_observer(self, 'made_object')
-	
-	#def get_visuals(self):
-	#	return (self.spriteq, self.textq)
+		subscribe(self, 'made_like_object')
+		subscribe(self, 'made_object')
 		
 	def made_like_object(self, sender, objtype, **kwargs):
 		"""Creates new object and places it in
@@ -770,7 +777,7 @@ class GameScene(Scene):
 		
 	def __exit__(self, *args):
 		for obj in [self] + self.allq.sprites() + self.textq.sprites():
-			rm_from_all(obj)
+			unsub_all(obj)
 		
 class IntroScene(GameScene):
 	def __init__(self):
@@ -947,14 +954,6 @@ class GameOverScene(GameScene):
 		pygame.mixer.music.set_volume(0.1)
 		pygame.mixer.music.play(-1)
 		return self
-		
-	def build_score_list(self):
-		for i, name_num in enumerate(scoreList):
-			x, y = (SCR_W / 3, ((SCR_H + 150) / 8) * (i + 1))
-			rgb = (50, 200 - (30 * i), 50)
-			Initials = TextObj(x, y, name_num[0], rgb, GAMEFONT)
-			HiScore = TextObj(x * 2, y, name_num[1], rgb, GAMEFONT)
-			self.add_obj(Initials, HiScore)
 			
 	def main(self, events):
 		"""Gets initials if you earned a hi-score. Displays scores."""
@@ -1003,7 +1002,7 @@ class Screen(object):
 		self.bgcolor = bgcolor or BLACK
 		self.fade_q = {}
 		pygame.display.set_caption(title)
-		add_observer(self, 'add_to_fade_q')
+		subscribe(self, 'add_to_fade_q')
 		
 	def rotate_img(self, img, face):
 		degs = -90 - math.degrees(math.atan2(face[1], face[0]))
@@ -1023,9 +1022,13 @@ class Screen(object):
 		if sprite.opacity in endpt:
 			sprite.opacity = target
 			del self.fade_q[sprite]
+			
+	def clear(self, visuals):
+		for queue in (self.bg.starfield, ) + visuals:
+			for sprite in queue.sprites():
+				self.view.fill(self.bgcolor, sprite.rect)
 				
-	def draw_with_fx(self, visuals):
-		#self.view.fill(self.bgcolor)
+	def apply_fx(self, visuals):
 		for queue in (self.bg.starfield,  ) + visuals:
 			for sprite in queue.sprites():
 				if sprite in self.fade_q:
@@ -1033,7 +1036,7 @@ class Screen(object):
 				if sprite.visible:
 					img_and_rect = [sprite.image, sprite.rect]
 					if sprite.opacity != 255:
-						new_img = pygame.Surface(img_and_rect[1].size)
+						new_img = pygame.Surface(img_and_rect[1].size).convert()
 						new_img.blit(img_and_rect[0], (0, 0))
 						new_img.set_alpha(sprite.opacity)
 						img_and_rect[0] = new_img
@@ -1041,7 +1044,6 @@ class Screen(object):
 						new_img = self.rotate_img(img_and_rect[0], sprite.rotation)
 						img_and_rect = [new_img, new_img.get_rect(center=sprite.pos)]
 					self.view.blit(*img_and_rect)
-		pygame.display.flip()
 
 def GameLoop():
 	FPSCLOCK = pygame.time.Clock()
@@ -1053,14 +1055,15 @@ def GameLoop():
 			with S() as CurrentScene:
 				events = []
 				while CurrentScene(events):
-					View.view.fill(View.bgcolor)
-					View.bg.update()
-					View.draw_with_fx(CurrentScene.visuals)
-					FPSCLOCK.tick(FPS)
 					events = pygame.event.get()
 					for e in events:
 						if e.type == pygame.QUIT:
 							return False
+					View.apply_fx(CurrentScene.visuals)
+					pygame.display.flip()
+					FPSCLOCK.tick(FPS)
+					View.clear(CurrentScene.visuals)
+					View.bg.update()
 						
 
 if __name__ == "__main__":
