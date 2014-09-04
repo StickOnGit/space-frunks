@@ -342,13 +342,17 @@ class Player(ListenSprite):
 	
 	@property
 	def visible(self):
-		if not self.lives:
-			return False
-		if self.respawn > FPS:
-			return False
-		if FPS > self.respawn > 0:
-			return False if self.respawn % 2 == 1 else True
-		return self.opacity > 0
+		#if not self.lives:
+		#	return False
+		#if self.respawn > FPS:
+		#	return False
+		#if FPS > self.respawn > 0:
+		#	return False if self.respawn % 2 == 1 else True
+		#return self.opacity > 0
+		return (self.lives and
+				self.respawn < FPS and
+				self.respawn % 2 == 0 and
+				self.opacity > 0)
 		
 	def __setattr__(self, k, v):
 		"""Auto-publishes message when listed items are updated.
@@ -364,7 +368,8 @@ class Player(ListenSprite):
 				
 	def fire(self, shotDirection):
 		"""Fires a shot."""
-		self.pub('made_like_object', self, Bullet, x=self.x, y=self.y, direction=shotDirection)
+		self.pub('made_like_object', self, Bullet, x=self.x, y=self.y, 
+					direction=shotDirection)
 		self.cooldown = 5
 		playerShotSound.play()
 
@@ -379,16 +384,19 @@ class Player(ListenSprite):
 		if self.score >= (GOT_1UP * self.next_extra_guy):
 			self.lives += 1
 			self.next_extra_guy += 1
-			self.pub('made_object', self, RiseText, x=self.x, y=self.y, color=(50, 200, 50), text='1UP')
+			self.pub('made_object', self, RiseText, x=self.x, y=self.y, 
+						color=(50, 200, 50), text='1UP')
 
 	def got_hit(self):
-		"""self.lives -= 1; if 0, self.kill(). Passes if ship is respawning."""
+		"""self.lives -= 1; if 0, self.kill(). Passes if respawning."""
 		if self.respawn <= 0:
-			rotato = math.degrees(math.atan2(self.direction[1], self.direction[0]))
+			rads = math.atan2(self.direction[1], self.direction[0])
+			rotato = math.degrees(rads)
 			current_img = pygame.transform.rotate(self.image, -90 - rotato)
 			halfw, halfh = [i / 2 for i in current_img.get_rect().size]
 			topX, topY = self.hit_rect.topleft
-			for index, piece in enumerate([(x, y) for x in (0, halfw) for y in (0, halfh)]):
+			pieces = [(x, y) for x in (0, halfw) for y in (0, halfh)]
+			for index, piece in enumerate(pieces):
 				BustedRect = pygame.Rect(piece[0], piece[1], halfw, halfh)
 				bustedX = topX if piece[0] == 0 else topX + halfw
 				bustedY = topY if piece[1] == 0 else topY + halfh
@@ -437,7 +445,8 @@ class PlayerMouse(ListenSprite):
 		
 	@property
 	def visible(self):
-		return self.bound_to.visible and not self.rect.colliderect(self.bound_to.rect)
+		return (self.bound_to.visible and 
+					not self.rect.colliderect(self.bound_to.rect))
 		
 	@property
 	def rect(self):
@@ -445,8 +454,9 @@ class PlayerMouse(ListenSprite):
 		
 	def update(self):
 		self.pos = pygame.mouse.get_pos()
-		pygame.draw.rect(self.image, [random.randrange(60, 220) for i in (0, 1, 2)], 
-							(0, 0, self.size, self.size), 1)
+		pygame.draw.rect(self.image, 
+						[random.randrange(60, 220) for i in (0, 1, 2)], 
+						(0, 0, self.size, self.size), 1)
 
 
 class Enemy(ListenSprite):
@@ -471,26 +481,30 @@ class Enemy(ListenSprite):
 		self.direction = [-i for i in self.direction]
 
 	def got_hit(self):
-		"""Simple hook to override got_hit in the event a badguy has 'hitpoints'
-		or some other effect.
+		"""Defines collision behavior.
+		At present the game does not call this if colliding
+		with the player.
 		"""
-		self.pub('made_object', self, Explosion, x=self.x, y=self.y)
-		self.pub('made_object', self, RiseText, x=self.x, y=self.y, text=self.points)
+		self.pub('made_object', self, 
+					Explosion, x=self.x, y=self.y)
+		self.pub('made_object', self, 
+					RiseText, x=self.x, y=self.y, text=self.points)
 		enemyDeadSound.play()
 		self.kill()
 
 	def shot_check(self):
-		"""Determines if and when the object can attempt to fire.
-		If the cooldown is 0 and it rolls a random number >= obj.shotrate, it fires.
-		"""
+		"""If cooldown == 0 and roll >= obj.shotrate, fires."""
 		self.cooldown -= 1
-		if self.cooldown <= 0 and random.randint(1, self.shotrate) >= self.shotrate:
+		roll = random.randint(1, self.shotrate)
+		if self.cooldown <= 0 and roll >= self.shotrate:
 			self.fire()
 				
 	def fire(self):
 		"""Fires a shot in a random direction."""
-		self.pub('made_like_object', self, Bullet, x=self.x, y=self.y, 
-				direction=random.choice(DIR_VALS), img=BADGUYSHOT, speed=4)
+		self.pub('made_like_object', self, 
+					Bullet, x=self.x, y=self.y, 
+					direction=random.choice(DIR_VALS), 
+					img=BADGUYSHOT, speed=4)
 		self.cooldown = FPS / 2
 		enemyShotSound.play()
 		
@@ -503,7 +517,9 @@ class Scooter(Enemy):
 		""" Scoots back and forth.
 		self.counter += 1 until > self.range, then reverse.
 		"""
-		if self.counter >= self.range or is_out_of_bounds(self.pos) or self.pos == self.target:
+		if (self.counter >= self.range or 
+				is_out_of_bounds(self.pos) or 
+				self.pos == self.target):
 			self.counter = 0
 			self.bounce()
 			self.set_target_with_distance(self.range)
@@ -540,7 +556,9 @@ class Rammer(Enemy):
 		self.move_to_target(self.origin if ship.respawn else ship.pos)
 		
 class Teleporter(Enemy):
-	def __init__(self, x, y, img=GREENSHIPIMG, leftlane=(15, 40), rightlane=(SCR_W-40, SCR_W-15), uplane=(15, 40), downlane=(SCR_H-40, SCR_H-15)):
+	def __init__(self, x, y, img=GREENSHIPIMG, leftlane=(15, 40), 
+					rightlane=(SCR_W-40, SCR_W-15), uplane=(15, 40), 
+					downlane=(SCR_H-40, SCR_H-15)):
 		super(Teleporter, self).__init__(x, y, img=img)
 		self.speed = 2 * 2
 		self.points = 200
@@ -553,9 +571,9 @@ class Teleporter(Enemy):
 		self.widex = range(self.xlane[0], self.xlane[-1])
 		self.widey = range(self.ylane[0], self.ylane[-1])
 	
-	@property
-	def visible(self):
-		return self.opacity > 0
+	#@property
+	#def visible(self):
+	#	return self.opacity > 0
 		
 	def got_hit(self):
 		if (FPS/2) < self.counter < (FPS*2):
@@ -789,7 +807,9 @@ class IntroScene(GameScene):
 		titleObj = TextObj(text='Space Frunks', font=self.title_font)
 		titleObj.pin_at('center', (SCR_W / 2, (SCR_H / 2) - 100))
 		
-		menu_list = 'Press any key to play#Mouse moves ship#10-keypad fires in 8 directions'.split('#')
+		menu_list = ['Press any key to play', 
+						'Mouse moves ship',
+						'10-keypad fires in 8 directions']
 		menuObj = MultiText(all_texts=menu_list, font=self.menu_font, 
 							color=GREEN, switch=(FPS * 1.15))
 		menuObj.pin_at('center', (SCR_W / 2, (SCR_H / 2) + 100))
@@ -823,7 +843,9 @@ class LevelScene(GameScene):
 		lives_num = TextObj(text=publish_with_results('give', 'last_lives')[0], 
 							color=WHITE, font=self.score_font)
 		level_text = TextObj(text='', color=WHITE, font=self.score_font)
-		gameover_text = TextObj(text='G  A  M  E    O  V  E  R', font=self.gameover_font)
+		
+		gameover_text = TextObj(text='  '.join("GAME OVER"), 
+								font=self.gameover_font)
 		score_text.pin_at('topleft', (15, 15))
 		score_num.pin_at('topleft', (score_text.rect.topright[0] + 5, 
 											score_text.rect.topright[1]))
@@ -863,13 +885,11 @@ class LevelScene(GameScene):
 		enemies = 2 + world
 		publish('set_lvl_txt', 'Level {} - {}'.format(world, stage))
 		
-		shipX, shipY = [int(i) for i in self.player.pos] #need integers because range() only takes ints
-		possibleAI = {
-					1:[Scooter, Scooter],
-					2:[Scooter, Scooter],
-					3:[Sweeper, Sweeper],
-					4:[Sweeper, Sweeper]
-				}
+		shipX, shipY = [int(i) for i in self.player.pos] #range() only takes ints
+		possibleAI = {1:[Scooter, Scooter],
+						2:[Scooter, Scooter],
+						3:[Sweeper, Sweeper],
+						4:[Sweeper, Sweeper]}
 		kinds_of_AI = possibleAI[stage]
 		if world >= 2:
 			kinds_of_AI.append(Teleporter)
@@ -965,7 +985,7 @@ class GameOverScene(GameScene):
 			for event in events:
 				if event.type == pygame.KEYDOWN:
 					next_char = str(event.unicode)
-					if next_char.isalnum():	#keeps input limited to letters/numbers
+					if next_char.isalnum():	#only letters/numbers
 						self.player_initials += next_char.upper()
 						publish('got_initial', self.player_initials)
 						if len(self.player_initials) == 3:
@@ -974,9 +994,6 @@ class GameOverScene(GameScene):
 							scoreList.reverse()
 							while len(scoreList) > 5:
 								scoreList.pop()
-							pickleScore = pickle.dumps(scoreList)
-							with open('scores.py', 'w') as f:
-								f.write(pickleScore)
 							self.state = 'build_scores'
 		if self.state == 'build_scores':
 			for txt in self.textq:
@@ -993,6 +1010,9 @@ class GameOverScene(GameScene):
 		
 	def __exit__(self, *args):
 		pygame.mixer.music.stop()
+		pickleScore = pickle.dumps(scoreList)
+		with open('scores.py', 'w') as f:
+			f.write(pickleScore)
 		super(GameOverScene, self).__exit__(*args)
 
 class Screen(object):
@@ -1007,9 +1027,6 @@ class Screen(object):
 	def rotate_img(self, img, face):
 		degs = -90 - math.degrees(math.atan2(face[1], face[0]))
 		return pygame.transform.rotate(img, degs)
-			
-	def draw_bg(self):
-		self.bg.update()
 		
 	def add_to_fade_q(self, sprite, current, target, frames):
 		step = (target - current) / frames
@@ -1024,25 +1041,25 @@ class Screen(object):
 			del self.fade_q[sprite]
 			
 	def clear(self, visuals):
-		for queue in (self.bg.starfield, ) + visuals:
-			for sprite in queue.sprites():
-				self.view.fill(self.bgcolor, sprite.rect)
+		for g in (self.bg.starfield, visuals[0], visuals[1]):
+			for s in g.sprites():
+				self.view.fill(self.bgcolor, s.rect)
 				
 	def apply_fx(self, visuals):
-		for queue in (self.bg.starfield,  ) + visuals:
-			for sprite in queue.sprites():
-				if sprite in self.fade_q:
-					self.fade_img(sprite)
-				if sprite.visible:
-					img_and_rect = [sprite.image, sprite.rect]
-					if sprite.opacity != 255:
+		for g in (self.bg.starfield, visuals[0], visuals[1]):
+			for s in g.sprites():
+				if s in self.fade_q:
+					self.fade_img(s)
+				if s.visible:
+					img_and_rect = [s.image, s.rect]
+					if s.opacity != 255:
 						new_img = pygame.Surface(img_and_rect[1].size).convert()
 						new_img.blit(img_and_rect[0], (0, 0))
-						new_img.set_alpha(sprite.opacity)
+						new_img.set_alpha(s.opacity)
 						img_and_rect[0] = new_img
-					if sprite.do_rotate:
-						new_img = self.rotate_img(img_and_rect[0], sprite.rotation)
-						img_and_rect = [new_img, new_img.get_rect(center=sprite.pos)]
+					if s.do_rotate:
+						new_img = self.rotate_img(img_and_rect[0], s.rotation)
+						img_and_rect = [new_img, new_img.get_rect(center=s.pos)]
 					self.view.blit(*img_and_rect)
 
 def GameLoop():
