@@ -146,14 +146,11 @@ class ListenSprite(pygame.sprite.Sprite):
         self.target = [0, 0]
         self.opacity = 255
         self.do_rotate = True
-        self.blank_surf = self.set_blank_surf()
-        
-    def set_blank_surf(self):
-        return pygame.Surface(self.image.get_rect().size)
         
     @property
     def x(self):
-        return self._xy[0]
+        #return self._xy[0]
+        return self.rect.centerx
     
     @x.setter
     def x(self, value):
@@ -162,7 +159,8 @@ class ListenSprite(pygame.sprite.Sprite):
     
     @property
     def y(self):
-        return self._xy[1]
+        #return self._xy[1]
+        return self.rect.centery
     
     @y.setter
     def y(self, value):
@@ -176,7 +174,6 @@ class ListenSprite(pygame.sprite.Sprite):
     @pos.setter
     def pos(self, xy):
         self._xy = xy
-        self.rect.center = self._xy
     
     @property
     def visible(self):
@@ -342,13 +339,6 @@ class Player(ListenSprite):
     
     @property
     def visible(self):
-        #if not self.lives:
-        #    return False
-        #if self.respawn > FPS:
-        #    return False
-        #if FPS > self.respawn > 0:
-        #    return False if self.respawn % 2 == 1 else True
-        #return self.opacity > 0
         return (self.lives and
                 self.respawn < FPS and
                 self.respawn % 2 == 0 and
