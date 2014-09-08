@@ -137,19 +137,22 @@ BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR]
 
 
 class ListenSprite(pygame.sprite.Sprite):
-    def __init__(self, x=1, y=1, img=PLAYERSHIPIMG):
+    def __init__(self, x=1, y=1, img=PLAYERSHIPIMG, speed=0, heading=None):
         super(ListenSprite, self).__init__()
-        self.image = img
-        self._xy = [x, y]
-        self.direction = [0, 0]
-        self.speed = 0
+        self.speed = speed
+        self.heading = heading or [0, 0]
         self.target = [0, 0]
         self.opacity = 255
         self.do_rotate = True
+        self.image = img
+        self._xy = [x, y]
+        self.rect = self.set_rect()
+        
+    def set_rect(self):
+        return self.image.get_rect(center=self._xy)
         
     @property
     def x(self):
-        #return self._xy[0]
         return self.rect.centerx
     
     @x.setter
@@ -159,7 +162,6 @@ class ListenSprite(pygame.sprite.Sprite):
     
     @property
     def y(self):
-        #return self._xy[1]
         return self.rect.centery
     
     @y.setter
@@ -174,6 +176,7 @@ class ListenSprite(pygame.sprite.Sprite):
     @pos.setter
     def pos(self, xy):
         self._xy = xy
+        self.rect.center = self._xy
     
     @property
     def visible(self):
@@ -181,11 +184,7 @@ class ListenSprite(pygame.sprite.Sprite):
     
     @property
     def rotation(self):
-        return self.direction
-    
-    @property
-    def rect(self):
-        return self.image.get_rect(center=self.pos)
+        return self.heading
 
     @property
     def hit_rect(self):
@@ -197,21 +196,21 @@ class ListenSprite(pygame.sprite.Sprite):
         new_rect.center = self.pos
         return new_rect
     
-    def set_direction(self, target):
-        self.direction = [i / abs(i) if i != 0 else 0 for i in [a - b for a, b in zip(target, self.pos)]]
-        if not 0 in self.direction:
-            self.direction = [i * Pt7 for i in self.direction]
+    def set_heading(self, target):
+        self.heading = [i / abs(i) if i != 0 else 0 for i in [a - b for a, b in zip(target, self.pos)]]
+        if not 0 in self.heading:
+            self.heading = [i * Pt7 for i in self.heading]
             
     def set_target_with_distance(self, distance):
-        self.target = [a + (b * distance) for a, b in zip(self.pos, self.direction)]
+        self.target = [a + (b * distance) for a, b in zip(self.pos, self.heading)]
 
     def move(self):
-        self.pos = [a + (self.speed * b) for a, b in zip(self.pos, self.direction)]
+        self.pos = [a + (self.speed * b) for a, b in zip(self.pos, self.heading)]
     
     def move_to_target(self, target_pos):
         absX, absY = (abs(a - b) for a, b in zip(target_pos, self.pos))
         if absX**2 + absY**2 >= self.speed**2:
-            self.set_direction(target_pos)
+            self.set_heading(target_pos)
             self.move()
             if absX < self.speed:
                 self.x = target_pos[0]
@@ -247,7 +246,7 @@ class Explosion(ListenSprite):
         self.counter = 0
         self.rate = rate
         self.do_rotate = False
-        self.direction = random.choice(DIR_VALS)
+        self.heading = random.choice(DIR_VALS)
         
     def update(self):
         self.counter += 1
@@ -259,25 +258,32 @@ class Explosion(ListenSprite):
     
 class TextObj(ListenSprite):
     def __init__(self, x=0, y=0, text='_default_', color=GREEN, font=GAMEFONT):
-        self._xy = [x, y]
-        self.text = str(text)
+        super(TextObj, self).__init__(x, y, img=font.render(str(text), True, color))
         self.color = color
         self.font = font
-        self.direction = [0, 0]
-        super(TextObj, self).__init__(x, y)
-        self.image = self.font.render(self.text, True, self.color)
         self.do_rotate = False
+        self.set_rect()
+        
+    def set_rect(self):
+       self.rect = self.image.get_rect(center=self._xy)
+       if self.pinned:
+           setattr(self.rect, self.pinned_to[0], self.pinned_to[1])
     
     @property
     def pinned(self):
         return getattr(self, 'pinned_to', False)
-
+        
     @property
-    def rect(self):
-        new_rect = self.image.get_rect(center=self.pos)
+    def pos(self):
         if self.pinned:
-            setattr(new_rect, self.pinned_to[0], self.pinned_to[1])
-        return new_rect
+            setattr(self.rect, self.pinned_to[0], self.pinned_to[1])
+            self._xy = self.rect.center
+        return self._xy
+    
+    @pos.setter
+    def pos(self, value):
+        self._xy = value
+        self.rect.center = self._xy
     
     @property
     def rotation(self):
@@ -285,18 +291,21 @@ class TextObj(ListenSprite):
 
     def pin_at(self, corner, coordinates):
         self.pinned_to = (corner, coordinates)
+        self.set_rect()
     
     def set_text(self, text):
-        self.text = str(text)
-        self.image = self.font.render(self.text, True, self.color)
+        self.image = self.font.render(str(text), True, self.color)
+        self.set_rect()
         
 class RiseText(TextObj):
     """A TextObj that rises and self-kills when its counter = 0."""
-    def __init__(self, x=0, y=0, text='_default_', color=LITERED, font=pygame.font.Font('freesansbold.ttf', 10), counter=45, speed=1, direction=UP):
+    def __init__(self, x=0, y=0, text='_default_', color=LITERED,
+                    font=pygame.font.Font('freesansbold.ttf', 10), 
+                    counter=45, speed=1, heading=UP):
         super(RiseText, self).__init__(x, y, text, color, font)
         self.counter = counter
         self.speed = speed * 2
-        self.direction = direction
+        self.heading = heading
 
     def update(self):
         self.counter -= 1
@@ -308,23 +317,28 @@ class MultiText(TextObj):
     """TextObj that cycles through a list of possible text.
     Changes when its counter is >= its switch value.
     """
-    def __init__(self, x=0, y=0, all_texts=None, color=RED, font=GAMEFONT, switch=FPS):
-        text = '_default_'
-        super(MultiText, self).__init__(x, y, text, color, font)
-        self.all_texts = all_texts or [text]
+    def __init__(self, x=0, y=0, all_texts=None, 
+                    color=RED, font=GAMEFONT, switch=FPS):
+        super(MultiText, self).__init__(x, y, None, color, font)
+        self.all_texts = self.set_all_texts(all_texts or [text])
+        self.image = self.all_texts[0]
+        self.set_rect()
         self.counter = 0
         self.switch = int(switch)
-        self.set_text(self.all_texts[0])
+        
+    def set_all_texts(self, all_texts):
+        return [self.font.render(txt, True, self.color) for txt in all_texts]
         
     def update(self):
-        current_text = self.counter / self.switch
+        now = self.counter / self.switch
         self.counter += 1
-        next_text = self.counter / self.switch
-        if next_text >= len(self.all_texts):
+        next = self.counter / self.switch
+        if next >= len(self.all_texts):
             self.counter = 0
-            next_text = 0
-        if current_text != next_text:
-            self.set_text(self.all_texts[next_text])
+            next = 0
+        if now != next:
+            self.image = self.all_texts[next]
+            self.set_rect()
                 
 
 class Player(ListenSprite):
@@ -356,10 +370,10 @@ class Player(ListenSprite):
         if eventkey in KEY_VAL and self.cooldown == 0:
             self.fire(KEY_VAL[eventkey])
                 
-    def fire(self, shotDirection):
+    def fire(self, shotheading):
         """Fires a shot."""
-        self.pub('made_like_object', self, Bullet, x=self.x, y=self.y, 
-                    direction=shotDirection)
+        self.pub('made_like_object', self, 
+                    Bullet, x=self.x, y=self.y, heading=shotheading)
         self.cooldown = 5
         playerShotSound.play()
 
@@ -380,20 +394,20 @@ class Player(ListenSprite):
     def got_hit(self):
         """self.lives -= 1; if 0, self.kill(). Passes if respawning."""
         if self.respawn <= 0:
-            rads = math.atan2(self.direction[1], self.direction[0])
-            rotato = math.degrees(rads)
-            current_img = pygame.transform.rotate(self.image, -90 - rotato)
-            halfw, halfh = [i / 2 for i in current_img.get_rect().size]
-            topX, topY = self.hit_rect.topleft
-            pieces = [(x, y) for x in (0, halfw) for y in (0, halfh)]
+            rads = math.atan2(self.heading[1], self.heading[0])
+            degs = math.degrees(rads)
+            CurrentImg = pygame.transform.rotate(self.image, -90 - degs)
+            half_w, half_h = [i / 2 for i in CurrentImg.get_rect().size]
+            top_x, top_y = self.hit_rect.topleft
+            pieces = [(x, y) for x in (0, half_w) for y in (0, half_h)]
             for index, piece in enumerate(pieces):
-                BustedRect = pygame.Rect(piece[0], piece[1], halfw, halfh)
-                bustedX = topX if piece[0] == 0 else topX + halfw
-                bustedY = topY if piece[1] == 0 else topY + halfh
-                self.pub('made_object', self, ShipPiece, 
-                        x=bustedX, y=bustedY,
-                        img_piece=current_img.subsurface(BustedRect),
-                        direction=DIR_DIAGS[index])
+                BustedRect = pygame.Rect(piece[0], piece[1], half_w, half_h)
+                new_x = top_x if piece[0] == 0 else top_x + half_w
+                new_y = top_y if piece[1] == 0 else top_y + half_h
+                self.pub('made_object', self, 
+                        ShipPiece, x=new_x, y=new_y,
+                        img_piece=CurrentImg.subsurface(BustedRect),
+                        heading=DIR_DIAGS[index])
             self.respawn = FPS * 2
             self.cooldown = FPS * 2
             self.lives -= 1
@@ -402,9 +416,9 @@ class Player(ListenSprite):
             self.kill()
             
 class ShipPiece(ListenSprite):
-    def __init__(self, x, y, img_piece, direction):
+    def __init__(self, x, y, img_piece, heading):
         super(ShipPiece, self).__init__(x, y, img=img_piece)
-        self.direction = direction
+        self.heading = heading
         self.speed = 1 * 2
         self.counter = int(FPS * 0.75)
         self.opacity = 127
@@ -422,25 +436,18 @@ class ShipPiece(ListenSprite):
             
 class PlayerMouse(ListenSprite):
     def __init__(self, x, y, bound_to, size=9):
-        super(PlayerMouse, self).__init__(x, y)
+        super(PlayerMouse, self).__init__(x, y, img=self.set_draw_surf(size))
         self.size = size
         self.bound_to = bound_to
         self.do_rotate = False
-        self.image = self.set_draw_surf(size)
     
     def set_draw_surf(self, size):
-        new_surf = pygame.Surface((size, size))
-        new_surf.set_colorkey(BLACK)
-        return new_surf
+        return pygame.Surface((size, size)).convert()
         
     @property
     def visible(self):
         return (self.bound_to.visible and 
-                    not self.rect.colliderect(self.bound_to.rect))
-        
-    @property
-    def rect(self):
-        return self.image.get_rect(center=self.pos)
+                not self.rect.colliderect(self.bound_to.rect))
         
     def update(self):
         self.pos = pygame.mouse.get_pos()
@@ -456,7 +463,7 @@ class Enemy(ListenSprite):
         self.origin = self.pos
         self.range = random.randrange(60, 120)
         self.counter = random.randrange(0, self.range)
-        self.direction = random.choice(dirs)
+        self.heading = random.choice(dirs)
         self.speed = 3 * 2
         self.cooldown = FPS / 2
         self.points = 100
@@ -468,7 +475,7 @@ class Enemy(ListenSprite):
         raise NotImplementedError
         
     def bounce(self):
-        self.direction = [-i for i in self.direction]
+        self.heading = [-i for i in self.heading]
 
     def got_hit(self):
         """Defines collision behavior.
@@ -490,10 +497,10 @@ class Enemy(ListenSprite):
             self.fire()
                 
     def fire(self):
-        """Fires a shot in a random direction."""
+        """Fires a shot in a random heading."""
         self.pub('made_like_object', self, 
                     Bullet, x=self.x, y=self.y, 
-                    direction=random.choice(DIR_VALS), 
+                    heading=random.choice(DIR_VALS), 
                     img=BADGUYSHOT, speed=4)
         self.cooldown = FPS / 2
         enemyShotSound.play()
@@ -560,10 +567,6 @@ class Teleporter(Enemy):
         self.ylane = self.uplane + self.downlane
         self.widex = range(self.xlane[0], self.xlane[-1])
         self.widey = range(self.ylane[0], self.ylane[-1])
-    
-    #@property
-    #def visible(self):
-    #    return self.opacity > 0
         
     def got_hit(self):
         if (FPS/2) < self.counter < (FPS*2):
@@ -597,16 +600,16 @@ class Teleporter(Enemy):
             elif self.y in self.downlane:
                 bady = 1
             new_dirs =[[x, y] for x in picks if x != badx for y in picks if y != bady if [x, y] != [0, 0]]
-            self.direction = random.choice(new_dirs)
+            self.heading = random.choice(new_dirs)
             self.counter = FPS * 3
             self.show(frames=FPS/2)
             teleportSound.play()
 
 class Bullet(ListenSprite):
     """Bullet object. When it hits things, they blows up."""
-    def __init__(self, x, y, direction, img=GOODGUYSHOT, speed=8):
+    def __init__(self, x, y, heading, img=GOODGUYSHOT, speed=8):
         super(Bullet, self).__init__(x, y, img=img)
-        self.direction = direction
+        self.heading = heading
         self.range = SCR_D + 20
         self.counter = 0
         self.speed = speed * 2
@@ -616,41 +619,51 @@ class Bullet(ListenSprite):
     def update(self):
         self.move()
         self.counter += self.speed
-        if is_out_of_bounds(self.pos, offset=50) or self.counter >= self.range:
+        if is_out_of_bounds(self.pos, offset=50) or self.counter > self.range:
             self.kill()
 
     def got_hit(self):
         self.kill()
 
 class Star(ListenSprite):
-    def __init__(self, x, y, speed, direction):
-        super(Star, self).__init__(x, y)
-        self.speed = speed
-        self.direction = direction
+    def __init__(self, x, y, speed, heading):
+        super(Star, self).__init__(x, y, speed=speed, heading=heading,
+                                    img=self.set_image(speed, heading, 
+                                    color=self.set_color(speed)))
         self.do_rotate = False
         self.color = self.set_color()
         self.image = self.set_image()
         
     @property
     def visible(self):
-        rate = 7 * self.speed
+        rate = int(7 * (self.speed * self.speed))
         if random.randint(0, rate) > rate - 1:
             return False
         return True
         
-    def set_color(self):
-        new_c = [int(c * self.speed * 0.25) for c in (180, 150, 150)]
+    def set_color(self, speed=None):
+        if speed is None:
+            speed = self.speed
+        new_c = [int(c * speed * 0.25) for c in (180, 150, 150)]
+        for i, c in enumerate(new_c):
+            if not 0 <= c <= 255:
+                new_c[i] = 0 if c < 0 else 255
         return new_c
         
-    def set_image(self):
-        new_surf = pygame.Surface((self.speed * 2, self.speed * 2))
-        temp_rect = new_surf.get_rect()
-        a = temp_rect.center
+    def set_image(self, speed=None, heading=None, color=None):
+        if speed is None:
+            speed = self.speed
+        if heading is None:
+            heading = self.heading
+        if color is None:
+            color = self.color
+        NewSurf = pygame.Surface((speed * 2, speed * 2))
+        a = NewSurf.get_rect().center
         b = [0, 0]
         for i, p in enumerate(a):
-            b[i] = (a[i] + (self.direction[i] * self.speed))
-        pygame.draw.line(new_surf, self.color, a, b, 1)
-        return new_surf
+            b[i] = (a[i] + (heading[i] * -speed))
+        pygame.draw.line(NewSurf, color, a, b, 1)
+        return NewSurf
     
     def update(self):
         self.move()
@@ -664,21 +677,21 @@ class Starfield(object):
     def __init__(self, stars=50):
         self.stars = stars
         self.starfield = pygame.sprite.Group()
-        self.direction = DOWN
+        self.heading = DOWN
         self.add_stars()
-        subscribe(self, 'new_direction')
+        subscribe(self, 'new_heading')
     
     def add_stars(self):
         for i in range(self.stars):
             x, y = [random.randint(0, i) for i in (SCR_W, SCR_H)]
             speed = random.randrange(1, 5)
-            self.starfield.add(Star(x, y, speed, self.direction))
+            self.starfield.add(Star(x, y, speed, self.heading))
             
-    def new_direction(self, dirs=DIR_VALS):
-        self.direction = random.choice([x for x in dirs if x != self.direction])
-        for S in self.starfield:
-            S.direction = self.direction
-            S.image = S.set_image()
+    def new_heading(self, dirs=DIR_VALS):
+        self.heading = random.choice([x for x in dirs if x != self.heading])
+        for star in self.starfield:
+            star.heading = self.heading
+            star.image = star.set_image()
     
     def update(self):
         for star in self.starfield:
@@ -711,20 +724,20 @@ class StatKeeper(object):
 #        self.color = tuple([color+15 if color < 230 else 255 for color in self.color])
 #    if self.color == WHITE:
 #        shotx, shoty = self.rect.center
-#        for direction in DIR_VALS:
-#            badBullet = Bullet(shotx, shoty, direction)
+#        for heading in DIR_VALS:
+#            badBullet = Bullet(shotx, shoty, heading)
 #            badBullet.speed = 7
 #            badBullet.range = 50
 #            badBullet.color = LITERED
 #            badqueue.add(badBullet)
 #            allqueue.add(badBullet)
-#        if 'up' in self.direction:
+#        if 'up' in self.heading:
 #            self.y = SCR_H + 10
-#        if 'down' in self.direction:
+#        if 'down' in self.heading:
 #            self.y = -10
-#        if 'left' in self.direction:
+#        if 'left' in self.heading:
 #            self.x = SCR_W + 10
-#        if 'right' in self.direction:
+#        if 'right' in self.heading:
 #            self.x = -10
 #            
 #        self.origin = (self.rect.center)
@@ -762,17 +775,17 @@ class GameScene(Scene):
         the same Sprite Groups that the message
         sender belongs to.
         """
-        new_obj = objtype(**kwargs)
+        NewObj = objtype(**kwargs)
         for group in sender.groups():
-            group.add(new_obj)
-        self.add_obj(new_obj)
+            group.add(NewObj)
+        self.add_obj(NewObj)
             
     def made_object(self, sender, objtype, **kwargs):
         """Creates new object and places it 
         just in the allqueue.
         """
-        new_obj = objtype(**kwargs)
-        self.add_obj(new_obj)
+        NewObj = objtype(**kwargs)
+        self.add_obj(NewObj)
         
     def add_obj(self, *news):
         for new_obj in news:
@@ -794,16 +807,16 @@ class IntroScene(GameScene):
         self.menu_font = pygame.font.Font('freesansbold.ttf', 18)
         
     def __enter__(self, *args):
-        titleObj = TextObj(text='Space Frunks', font=self.title_font)
-        titleObj.pin_at('center', (SCR_W / 2, (SCR_H / 2) - 100))
+        Title = TextObj(text='Space Frunks', font=self.title_font)
+        Title.pin_at('center', (SCR_W / 2, (SCR_H / 2) - 100))
         
-        menu_list = ['Press any key to play', 
-                        'Mouse moves ship',
-                        '10-keypad fires in 8 directions']
-        menuObj = MultiText(all_texts=menu_list, font=self.menu_font, 
+        menu_txt = ['Press any key to play', 
+                    'Mouse moves ship',
+                    '10-keypad fires in 8 headings']
+        Menu = MultiText(all_texts=menu_txt, font=self.menu_font, 
                             color=GREEN, switch=(FPS * 1.15))
-        menuObj.pin_at('center', (SCR_W / 2, (SCR_H / 2) + 100))
-        self.add_obj(titleObj, menuObj)
+        Menu.pin_at('center', (SCR_W / 2, (SCR_H / 2) + 100))
+        self.add_obj(Title, Menu)
         return self
     
     def main(self, events):
@@ -826,46 +839,46 @@ class LevelScene(GameScene):
         self.go_to_gameover = FPS * 3
         
     def __enter__(self, *args):
-        score_text = TextObj(text='Score:', color=WHITE, font=self.score_font)
-        score_num = TextObj(text=publish_with_results('give', 'last_score')[0], 
+        ScoreTxt = TextObj(text='Score:', color=WHITE, font=self.score_font)
+        ScoreNum = TextObj(text=publish_with_results('give', 'last_score')[0], 
                             color=WHITE, font=self.score_font)
-        lives_text = TextObj(text='Lives:', color=WHITE, font=self.score_font)
-        lives_num = TextObj(text=publish_with_results('give', 'last_lives')[0], 
+        LivesTxt = TextObj(text='Lives:', color=WHITE, font=self.score_font)
+        LivesNum = TextObj(text=publish_with_results('give', 'last_lives')[0], 
                             color=WHITE, font=self.score_font)
-        level_text = TextObj(text='', color=WHITE, font=self.score_font)
+        LevelTxt = TextObj(text='', color=WHITE, font=self.score_font)
         
-        gameover_text = TextObj(text='  '.join("GAME OVER"), 
+        GameoverTxt = TextObj(text='  '.join("GAME OVER"), 
                                 font=self.gameover_font)
-        score_text.pin_at('topleft', (15, 15))
-        score_num.pin_at('topleft', (score_text.rect.topright[0] + 5, 
-                                            score_text.rect.topright[1]))
+        ScoreTxt.pin_at('topleft', (15, 15))
+        ScoreNum.pin_at('topleft', (ScoreTxt.rect.topright[0] + 5, 
+                                    ScoreTxt.rect.topright[1]))
         
-        lives_text.pin_at('topright', (SCR_W - (SCR_W / 19), 15))
-        lives_num.pin_at('topleft', (lives_text.rect.topright[0] + 5, 
-                                            lives_text.rect.topright[1]))
+        LivesTxt.pin_at('topright', (SCR_W - (SCR_W / 19), 15))
+        LivesNum.pin_at('topleft', (LivesTxt.rect.topright[0] + 5, 
+                                    LivesTxt.rect.topright[1]))
         
-        level_text.pin_at('center', (SCR_W / 2, SCR_H / 20))
-        gameover_text.pin_at('center', (SCR_W / 2, SCR_H / 2))
-        gameover_text.hide()
+        LevelTxt.pin_at('center', (SCR_W / 2, SCR_H / 20))
+        GameoverTxt.pin_at('center', (SCR_W / 2, SCR_H / 2))
+        GameoverTxt.hide()
         
-        score_num.ship_set_score = score_num.set_text
-        score_num.sub('ship_set_score')
-        lives_num.ship_set_lives = lives_num.set_text
-        lives_num.sub('ship_set_lives')
-        level_text.set_lvl_txt = level_text.set_text
-        level_text.sub('set_lvl_txt')
-        gameover_text.gameover_show = gameover_text.show
-        gameover_text.sub('gameover_show')
-        gameover_text.gameover_hide = gameover_text.hide
-        gameover_text.sub('gameover_hide')
+        ScoreNum.ship_set_score = ScoreNum.set_text
+        ScoreNum.sub('ship_set_score')
+        LivesNum.ship_set_lives = LivesNum.set_text
+        LivesNum.sub('ship_set_lives')
+        LevelTxt.set_lvl_txt = LevelTxt.set_text
+        LevelTxt.sub('set_lvl_txt')
+        GameoverTxt.gameover_show = GameoverTxt.show
+        GameoverTxt.sub('gameover_show')
+        GameoverTxt.gameover_hide = GameoverTxt.hide
+        GameoverTxt.sub('gameover_hide')
         
-        halfX, halfY = pygame.display.get_surface().get_rect().center
-        pygame.mouse.set_pos([halfX, halfY])
+        start_x, start_y = pygame.display.get_surface().get_rect().center
+        pygame.mouse.set_pos([start_x, start_y])
         
-        self.player = Player(halfX, halfY)
-        PlayerSights = PlayerMouse(halfX, halfY, bound_to=self.player)
-        self.add_obj(score_text, score_num, lives_text, 
-                    lives_num, level_text, gameover_text, 
+        self.player = Player(start_x, start_y)
+        PlayerSights = PlayerMouse(start_x, start_y, bound_to=self.player)
+        self.add_obj(ScoreTxt, ScoreNum, LivesTxt, 
+                    LivesNum, LevelTxt, GameoverTxt, 
                     self.player, PlayerSights)
         self.goodq.add(self.player)
         return self
@@ -895,7 +908,7 @@ class LevelScene(GameScene):
             NewEnemy.add(self.badq)
             self.add_obj(NewEnemy)
         if stage % 4 == 1 and world > 1:
-            publish('new_direction')
+            publish('new_heading')
             
     def main(self, events):
         if self.state == 'gameover':
@@ -951,15 +964,15 @@ class GameOverScene(GameScene):
         if self.ship_score > scoreList[-1][1]:
             self.state = 'get_score'
         
-        playerInitials = TextObj(text='', color=WHITE)
-        playerInitials.pin_at('center', (SCR_W / 2, SCR_H / 2))
-        playerInitials.got_initial = playerInitials.set_text
-        playerInitials.sub('got_initial')
+        Initials = TextObj(text='', color=WHITE)
+        Initials.pin_at('center', (SCR_W / 2, SCR_H / 2))
+        Initials.got_initial = Initials.set_text
+        Initials.sub('got_initial')
         
-        congratsText = TextObj(text='High score!  Enter your name, frunk destroyer.')
-        congratsText.pin_at('center', (SCR_W / 2, SCR_H / 10))
+        Congrats = TextObj(text='High score!  Enter your name, frunk destroyer.')
+        Congrats.pin_at('center', (SCR_W / 2, SCR_H / 10))
         
-        self.add_obj(playerInitials, congratsText)
+        self.add_obj(Initials, Congrats)
         pygame.mixer.music.load(path.join('sounds', 'gameover.wav'))
         pygame.mixer.music.set_volume(0.1)
         pygame.mixer.music.play(-1)
@@ -991,9 +1004,9 @@ class GameOverScene(GameScene):
             for i, name_num in enumerate(scoreList):
                 x, y = (SCR_W / 3, ((SCR_H + 150) / 8) * (i + 1))
                 rgb = (50, 200 - (30 * i), 50)
-                Initials = TextObj(x, y, name_num[0], rgb)
+                Name = TextObj(x, y, name_num[0], rgb)
                 HiScore = TextObj(x * 2, y, name_num[1], rgb)
-                self.add_obj(Initials, HiScore)
+                self.add_obj(Name, HiScore)
             self.state = 'show_scores'
         self.allq.update()
         return True
@@ -1014,8 +1027,8 @@ class Screen(object):
         pygame.display.set_caption(title)
         subscribe(self, 'add_to_fade_q')
         
-    def rotate_img(self, img, face):
-        degs = -90 - math.degrees(math.atan2(face[1], face[0]))
+    def rotate_img(self, img, heading):
+        degs = -90 - math.degrees(math.atan2(heading[1], heading[0]))
         return pygame.transform.rotate(img, degs)
         
     def add_to_fade_q(self, sprite, current, target, frames):
@@ -1024,9 +1037,9 @@ class Screen(object):
         self.fade_q[sprite] = (step, target, endpt)
     
     def fade_img(self, sprite):
-        step, target, endpt = self.fade_q[sprite]
+        step, target, endzone = self.fade_q[sprite]
         sprite.opacity += step
-        if sprite.opacity in endpt:
+        if sprite.opacity in endzone:
             sprite.opacity = target
             del self.fade_q[sprite]
             
@@ -1043,13 +1056,13 @@ class Screen(object):
                 if s.visible:
                     img_and_rect = [s.image, s.rect]
                     if s.opacity != 255:
-                        new_img = pygame.Surface(img_and_rect[1].size).convert()
-                        new_img.blit(img_and_rect[0], (0, 0))
-                        new_img.set_alpha(s.opacity)
-                        img_and_rect[0] = new_img
+                        NewImg = pygame.Surface(img_and_rect[1].size).convert()
+                        NewImg.blit(img_and_rect[0], (0, 0))
+                        NewImg.set_alpha(s.opacity)
+                        img_and_rect[0] = NewImg
                     if s.do_rotate:
-                        new_img = self.rotate_img(img_and_rect[0], s.rotation)
-                        img_and_rect = [new_img, new_img.get_rect(center=s.pos)]
+                        NewImg = self.rotate_img(img_and_rect[0], s.rotation)
+                        img_and_rect = [NewImg, NewImg.get_rect(center=s.pos)]
                     self.view.blit(*img_and_rect)
 
 def GameLoop():
