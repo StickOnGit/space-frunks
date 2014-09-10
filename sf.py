@@ -18,6 +18,7 @@ from code.player import Player
 from code.textobj import TextObj
 from code.risetext import RiseText
 from code.explosion import Explosion
+from code.multitext import MultiText
 from os import path
 from weakref import WeakKeyDictionary
 try:
@@ -139,49 +140,7 @@ BOOMTWO = ALLSHEET.image_at((32, 96, 32, 32), -1)
 BOOMTHR = ALLSHEET.image_at((64, 96, 32, 32), -1)
 BOOMFOR = ALLSHEET.image_at((96, 96, 32, 32), -1)
 BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR]
-  
-#class RiseText(TextObj):
-#    """A TextObj that rises and self-kills when its counter = 0."""
-#    def __init__(self, x=0, y=0, text='_default_', color=LITERED,
-#                    font=pygame.font.Font('freesansbold.ttf', 10), 
-#                    counter=45, speed=1, heading=UP):
-#        super(RiseText, self).__init__(x, y, text, color, font)
-#        self.counter = counter
-#        self.speed = speed * 2
-#        self.heading = heading
-#
-#    def update(self):
-#        self.counter -= 1
-#        self.move()
-#        if self.counter < 0:
-#            self.kill()
-            
-class MultiText(TextObj):
-    """TextObj that cycles through a list of possible text.
-    Changes when its counter is >= its switch value.
-    """
-    def __init__(self, x=0, y=0, all_texts=None, 
-                    color=RED, font=GAMEFONT, switch=FPS):
-        super(MultiText, self).__init__(x, y, None, color, font)
-        self.all_texts = self.set_all_texts(all_texts or [text])
-        self.image = self.all_texts[0]
-        self.set_rect()
-        self.counter = 0
-        self.switch = int(switch)
-        
-    def set_all_texts(self, all_texts):
-        return [self.font.render(txt, True, self.color) for txt in all_texts]
-        
-    def update(self):
-        now = self.counter / self.switch
-        self.counter += 1
-        next = self.counter / self.switch
-        if next >= len(self.all_texts):
-            self.counter = 0
-            next = 0
-        if now != next:
-            self.image = self.all_texts[next]
-            self.set_rect()
+
           
 class ShipPiece(ListenSprite):
     def __init__(self, x, y, img_piece, heading):
@@ -250,10 +209,6 @@ class Enemy(ListenSprite):
         At present the game does not call this if colliding
         with the player.
         """
-        #self.pub('made_object', self, 
-        #            Explosion, x=self.x, y=self.y)
-        #self.pub('made_object', self, 
-        #            RiseText, x=self.x, y=self.y, text=self.points)
         self.pub('enemy_died', self)
         enemyDeadSound.play()
         self.kill()
