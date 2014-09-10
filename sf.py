@@ -20,7 +20,6 @@ from code.risetext import RiseText
 from code.explosion import Explosion
 from code.multitext import MultiText
 from os import path
-from weakref import WeakKeyDictionary
 try:
     import cPickle as pickle
 except:
