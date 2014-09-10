@@ -12,7 +12,10 @@ import random
 import sys
 import spritesheet
 import math
-from tenfwd import subscribe, unsub, unsub_all, publish, publish_with_results
+from code.tenfwd import subscribe, unsub, unsub_all, publish, publish_with_results
+from code.listensprite import ListenSprite
+from code.player import Player
+from code.textobj import TextObj
 from os import path
 from weakref import WeakKeyDictionary
 try:
@@ -135,110 +138,6 @@ BOOMTHR = ALLSHEET.image_at((64, 96, 32, 32), -1)
 BOOMFOR = ALLSHEET.image_at((96, 96, 32, 32), -1)
 BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR]
 
-
-class ListenSprite(pygame.sprite.Sprite):
-    def __init__(self, x=1, y=1, img=PLAYERSHIPIMG, speed=0, heading=None):
-        super(ListenSprite, self).__init__()
-        self.speed = speed
-        self.heading = heading or [0, 0]
-        self.target = [0, 0]
-        self.opacity = 255
-        self.do_rotate = True
-        self.image = img
-        self._xy = [x, y]
-        self.rect = self.set_rect()
-        
-    def set_rect(self):
-        return self.image.get_rect(center=self._xy)
-        
-    @property
-    def x(self):
-        return self.rect.centerx
-    
-    @x.setter
-    def x(self, value):
-        self._xy[0] = value
-        self.rect.centerx = self._xy[0]
-    
-    @property
-    def y(self):
-        return self.rect.centery
-    
-    @y.setter
-    def y(self, value):
-        self._xy[1] = value
-        self.rect.centery = self._xy[1]
-        
-    @property
-    def pos(self):
-        return self._xy
-        
-    @pos.setter
-    def pos(self, xy):
-        self._xy = xy
-        self.rect.center = self._xy
-    
-    @property
-    def visible(self):
-        return self.opacity > 0
-    
-    @property
-    def rotation(self):
-        return self.heading
-
-    @property
-    def hit_rect(self):
-        """Gets the current drawn image's bounding rect,
-        centers it on the current rect, and then replaces
-        the current rect.
-        """
-        new_rect = self.image.get_bounding_rect()
-        new_rect.center = self.pos
-        return new_rect
-    
-    def set_heading(self, target):
-        self.heading = [i / abs(i) if i != 0 else 0 for i in [a - b for a, b in zip(target, self.pos)]]
-        if not 0 in self.heading:
-            self.heading = [i * Pt7 for i in self.heading]
-            
-    def set_target_with_distance(self, distance):
-        self.target = [a + (b * distance) for a, b in zip(self.pos, self.heading)]
-
-    def move(self):
-        self.pos = [a + (self.speed * b) for a, b in zip(self.pos, self.heading)]
-    
-    def move_to_target(self, target_pos):
-        absX, absY = (abs(a - b) for a, b in zip(target_pos, self.pos))
-        if absX**2 + absY**2 >= self.speed**2:
-            self.set_heading(target_pos)
-            self.move()
-            if absX < self.speed:
-                self.x = target_pos[0]
-            if absY < self.speed:
-                self.y = target_pos[1]
-        else:
-            self.pos = target_pos
-
-    def sub(self, message):
-        subscribe(self, message)
-
-    def pub(self, message, *args, **kwargs):
-        publish(message, *args, **kwargs)
-
-    def unsub(self, message):
-        unsub(self, message)
-        
-    def hide(self, frames=1, target=0):
-        self.pub('add_to_fade_q', self, self.opacity, target, frames)
-    
-    def show(self, frames=1, target=255):
-        self.pub('add_to_fade_q', self, self.opacity, target, frames)
-
-    def kill(self):
-        unsub_all(self)
-        super(ListenSprite, self).kill()
-
-
 class Explosion(ListenSprite):
     def __init__(self, x, y, imgs=BOOMLIST, rate=1):
         super(Explosion, self).__init__(x, y, img=imgs[0])
@@ -255,47 +154,6 @@ class Explosion(ListenSprite):
             self.image = self.images[imgindex]
         else:
             self.kill()
-    
-class TextObj(ListenSprite):
-    def __init__(self, x=0, y=0, text='_default_', color=GREEN, font=GAMEFONT):
-        super(TextObj, self).__init__(x, y, img=font.render(str(text), True, color))
-        self.color = color
-        self.font = font
-        self.do_rotate = False
-        self.set_rect()
-        
-    def set_rect(self):
-       self.rect = self.image.get_rect(center=self._xy)
-       if self.pinned:
-           setattr(self.rect, self.pinned_to[0], self.pinned_to[1])
-    
-    @property
-    def pinned(self):
-        return getattr(self, 'pinned_to', False)
-        
-    @property
-    def pos(self):
-        if self.pinned:
-            setattr(self.rect, self.pinned_to[0], self.pinned_to[1])
-            self._xy = self.rect.center
-        return self._xy
-    
-    @pos.setter
-    def pos(self, value):
-        self._xy = value
-        self.rect.center = self._xy
-    
-    @property
-    def rotation(self):
-        return [0, 0]
-
-    def pin_at(self, corner, coordinates):
-        self.pinned_to = (corner, coordinates)
-        self.set_rect()
-    
-    def set_text(self, text):
-        self.image = self.font.render(str(text), True, self.color)
-        self.set_rect()
         
 class RiseText(TextObj):
     """A TextObj that rises and self-kills when its counter = 0."""
@@ -339,82 +197,7 @@ class MultiText(TextObj):
         if now != next:
             self.image = self.all_texts[next]
             self.set_rect()
-                
-
-class Player(ListenSprite):
-    def __init__(self, x, y):
-        super(Player, self).__init__(x, y)
-        self.speed = 4 * 2
-        self.cooldown = 0
-        self.respawn = 0
-        self.lives = 3
-        self.score = 0
-        self.next_extra_guy = 1
-    
-    @property
-    def visible(self):
-        return (self.lives and
-                self.respawn < FPS and
-                self.respawn % 2 == 0 and
-                self.opacity > 0)
-        
-    def __setattr__(self, k, v):
-        """Auto-publishes message when listed items are updated.
-        Message is 'ship_set_' + the attribute - 'ship_set_lives', etc.
-        """
-        super(Player, self).__setattr__(k, v)
-        if k in ('score', 'lives'):
-            self.pub('ship_set_{}'.format(k), v)
-
-    def handle_key(self, eventkey):
-        if eventkey in KEY_VAL and self.cooldown == 0:
-            self.fire(KEY_VAL[eventkey])
-                
-    def fire(self, shotheading):
-        """Fires a shot."""
-        self.pub('made_like_object', self, 
-                    Bullet, x=self.x, y=self.y, heading=shotheading)
-        self.cooldown = 5
-        playerShotSound.play()
-
-    def update(self):
-        """Uses move_to_target to follow the mouse.
-        Counts cooldown and respawn to 0 when needed
-        and checks its point total for extra lives.
-        """
-        self.move_to_target(pygame.mouse.get_pos())
-        self.cooldown -= 1 if self.cooldown > 0 else 0
-        self.respawn -= 1 if self.respawn > 0 else 0
-        if self.score >= (GOT_1UP * self.next_extra_guy):
-            self.lives += 1
-            self.next_extra_guy += 1
-            self.pub('made_object', self, RiseText, x=self.x, y=self.y, 
-                        color=(50, 200, 50), text='1UP')
-
-    def got_hit(self):
-        """self.lives -= 1; if 0, self.kill(). Passes if respawning."""
-        if self.respawn <= 0:
-            rads = math.atan2(self.heading[1], self.heading[0])
-            degs = math.degrees(rads)
-            CurrentImg = pygame.transform.rotate(self.image, -90 - degs)
-            half_w, half_h = [i / 2 for i in CurrentImg.get_rect().size]
-            top_x, top_y = self.hit_rect.topleft
-            pieces = [(x, y) for x in (0, half_w) for y in (0, half_h)]
-            for index, piece in enumerate(pieces):
-                BustedRect = pygame.Rect(piece[0], piece[1], half_w, half_h)
-                new_x = top_x if piece[0] == 0 else top_x + half_w
-                new_y = top_y if piece[1] == 0 else top_y + half_h
-                self.pub('made_object', self, 
-                        ShipPiece, x=new_x, y=new_y,
-                        img_piece=CurrentImg.subsurface(BustedRect),
-                        heading=DIR_DIAGS[index])
-            self.respawn = FPS * 2
-            self.cooldown = FPS * 2
-            self.lives -= 1
-            playerDeadSound.play()
-        if not self.lives:
-            self.kill()
-            
+          
 class ShipPiece(ListenSprite):
     def __init__(self, x, y, img_piece, heading):
         super(ShipPiece, self).__init__(x, y, img=img_piece)
@@ -767,8 +550,9 @@ class GameScene(Scene):
         self.spriteq = pygame.sprite.Group()
         self.textq = pygame.sprite.Group()
         self.visuals = self.spriteq, self.textq
-        subscribe(self, 'made_like_object')
-        subscribe(self, 'made_object')
+        for topic in ['made_like_object', 'made_object', 
+                        'player_fired', 'player_died', 'got_1up']:
+            subscribe(self, topic)
         
     def made_like_object(self, sender, objtype, **kwargs):
         """Creates new object and places it in
@@ -786,6 +570,30 @@ class GameScene(Scene):
         """
         NewObj = objtype(**kwargs)
         self.add_obj(NewObj)
+        
+    def player_fired(self, player, heading):
+        self.made_like_object(player, Bullet, 
+                x=player.x, y=player.y, heading=heading)
+    
+    def player_died(self, player):
+        rads = math.atan2(player.heading[1], player.heading[0])
+        degs = math.degrees(rads)
+        CurrentImg = pygame.transform.rotate(player.image, -90 - degs)
+        half_w, half_h = [i / 2 for i in CurrentImg.get_rect().size]
+        top_x, top_y = player.hit_rect.topleft
+        pieces = [(x, y) for x in (0, half_w) for y in (0, half_h)]
+        for index, piece in enumerate(pieces):
+            BustedRect = pygame.Rect(piece[0], piece[1], half_w, half_h)
+            new_x = top_x if piece[0] == 0 else top_x + half_w
+            new_y = top_y if piece[1] == 0 else top_y + half_h
+            self.made_object(player, 
+                    ShipPiece, x=new_x, y=new_y,
+                    img_piece=CurrentImg.subsurface(BustedRect),
+                    heading=DIR_DIAGS[index])
+    
+    def got_1up(self, player):
+        self.made_object(player, RiseText, 
+                x=player.x, y=player.y, color=(50, 200, 50), text='1UP')
         
     def add_obj(self, *news):
         for new_obj in news:
@@ -875,7 +683,7 @@ class LevelScene(GameScene):
         start_x, start_y = pygame.display.get_surface().get_rect().center
         pygame.mouse.set_pos([start_x, start_y])
         
-        self.player = Player(start_x, start_y)
+        self.player = Player(start_x, start_y, PLAYERSHIPIMG, KEY_VAL, GOT_1UP)
         PlayerSights = PlayerMouse(start_x, start_y, bound_to=self.player)
         self.add_obj(ScoreTxt, ScoreNum, LivesTxt, 
                     LivesNum, LevelTxt, GameoverTxt, 
