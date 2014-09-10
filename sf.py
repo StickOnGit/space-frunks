@@ -16,6 +16,8 @@ from code.tenfwd import subscribe, unsub, unsub_all, publish, publish_with_resul
 from code.listensprite import ListenSprite
 from code.player import Player
 from code.textobj import TextObj
+from code.risetext import RiseText
+from code.explosion import Explosion
 from os import path
 from weakref import WeakKeyDictionary
 try:
@@ -137,39 +139,22 @@ BOOMTWO = ALLSHEET.image_at((32, 96, 32, 32), -1)
 BOOMTHR = ALLSHEET.image_at((64, 96, 32, 32), -1)
 BOOMFOR = ALLSHEET.image_at((96, 96, 32, 32), -1)
 BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR]
-
-class Explosion(ListenSprite):
-    def __init__(self, x, y, imgs=BOOMLIST, rate=1):
-        super(Explosion, self).__init__(x, y, img=imgs[0])
-        self.images = imgs
-        self.counter = 0
-        self.rate = rate
-        self.do_rotate = False
-        self.heading = random.choice(DIR_VALS)
-        
-    def update(self):
-        self.counter += 1
-        imgindex = self.counter / self.rate
-        if imgindex < len(self.images):
-            self.image = self.images[imgindex]
-        else:
-            self.kill()
-        
-class RiseText(TextObj):
-    """A TextObj that rises and self-kills when its counter = 0."""
-    def __init__(self, x=0, y=0, text='_default_', color=LITERED,
-                    font=pygame.font.Font('freesansbold.ttf', 10), 
-                    counter=45, speed=1, heading=UP):
-        super(RiseText, self).__init__(x, y, text, color, font)
-        self.counter = counter
-        self.speed = speed * 2
-        self.heading = heading
-
-    def update(self):
-        self.counter -= 1
-        self.move()
-        if self.counter < 0:
-            self.kill()
+  
+#class RiseText(TextObj):
+#    """A TextObj that rises and self-kills when its counter = 0."""
+#    def __init__(self, x=0, y=0, text='_default_', color=LITERED,
+#                    font=pygame.font.Font('freesansbold.ttf', 10), 
+#                    counter=45, speed=1, heading=UP):
+#        super(RiseText, self).__init__(x, y, text, color, font)
+#        self.counter = counter
+#        self.speed = speed * 2
+#        self.heading = heading
+#
+#    def update(self):
+#        self.counter -= 1
+#        self.move()
+#        if self.counter < 0:
+#            self.kill()
             
 class MultiText(TextObj):
     """TextObj that cycles through a list of possible text.
@@ -265,10 +250,11 @@ class Enemy(ListenSprite):
         At present the game does not call this if colliding
         with the player.
         """
-        self.pub('made_object', self, 
-                    Explosion, x=self.x, y=self.y)
-        self.pub('made_object', self, 
-                    RiseText, x=self.x, y=self.y, text=self.points)
+        #self.pub('made_object', self, 
+        #            Explosion, x=self.x, y=self.y)
+        #self.pub('made_object', self, 
+        #            RiseText, x=self.x, y=self.y, text=self.points)
+        self.pub('enemy_died', self)
         enemyDeadSound.play()
         self.kill()
 
@@ -551,7 +537,8 @@ class GameScene(Scene):
         self.textq = pygame.sprite.Group()
         self.visuals = self.spriteq, self.textq
         for topic in ['made_like_object', 'made_object', 
-                        'player_fired', 'player_died', 'got_1up']:
+                        'player_fired', 'player_died', 'got_1up',
+                        'enemy_died']:
             subscribe(self, topic)
         
     def made_like_object(self, sender, objtype, **kwargs):
@@ -590,6 +577,13 @@ class GameScene(Scene):
                     ShipPiece, x=new_x, y=new_y,
                     img_piece=CurrentImg.subsurface(BustedRect),
                     heading=DIR_DIAGS[index])
+                    
+    def enemy_died(self, enemy):
+        self.made_object(enemy, 
+                    Explosion, x=enemy.x, y=enemy.y, imgs=BOOMLIST,
+                    heading=random.choice(DIR_VALS))
+        self.made_object(enemy, 
+                    RiseText, x=enemy.x, y=enemy.y, text=enemy.points)
     
     def got_1up(self, player):
         self.made_object(player, RiseText, 
