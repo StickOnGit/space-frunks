@@ -19,6 +19,9 @@ from code.textobj import TextObj
 from code.risetext import RiseText
 from code.explosion import Explosion
 from code.multitext import MultiText
+from code.shippiece import ShipPiece
+from code.playermouse import PlayerMouse
+from code.enemy import Enemy
 from os import path
 try:
     import cPickle as pickle
@@ -140,97 +143,9 @@ BOOMTHR = ALLSHEET.image_at((64, 96, 32, 32), -1)
 BOOMFOR = ALLSHEET.image_at((96, 96, 32, 32), -1)
 BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR]
 
-          
-class ShipPiece(ListenSprite):
-    def __init__(self, x, y, img_piece, heading):
-        super(ShipPiece, self).__init__(x, y, img=img_piece)
-        self.heading = heading
-        self.speed = 1 * 2
-        self.counter = int(FPS * 0.75)
-        self.opacity = 127
-        self.do_rotate = False
-    
-    @property
-    def visible(self):
-        return not self.counter % 2 == 1
-    
-    def update(self):
-        self.counter -= 1
-        self.move()
-        if self.counter <= 0:
-            self.kill()
-            
-class PlayerMouse(ListenSprite):
-    def __init__(self, x, y, bound_to, size=9):
-        super(PlayerMouse, self).__init__(x, y, img=self.set_draw_surf(size))
-        self.size = size
-        self.bound_to = bound_to
-        self.do_rotate = False
-    
-    def set_draw_surf(self, size):
-        return pygame.Surface((size, size)).convert()
-        
-    @property
-    def visible(self):
-        return (self.bound_to.visible and 
-                not self.rect.colliderect(self.bound_to.rect))
-        
-    def update(self):
-        self.pos = pygame.mouse.get_pos()
-        pygame.draw.rect(self.image, 
-                        [random.randrange(60, 220) for i in (0, 1, 2)], 
-                        (0, 0, self.size, self.size), 1)
-
-
-class Enemy(ListenSprite):
-    def __init__(self, x, y, dirs=DIR_VALS, img=REDSHIPIMG):
-        super(Enemy, self).__init__(x, y, img=img)
-        self.shotrate = 20
-        self.origin = self.pos
-        self.range = random.randrange(60, 120)
-        self.counter = random.randrange(0, self.range)
-        self.heading = random.choice(dirs)
-        self.speed = 3 * 2
-        self.cooldown = FPS / 2
-        self.points = 100
-    
-    def update(self):
-        """A hook for new movements. 
-        Replace this with new logic to change enemy behavior.
-        """
-        raise NotImplementedError
-        
-    def bounce(self):
-        self.heading = [-i for i in self.heading]
-
-    def got_hit(self):
-        """Defines collision behavior.
-        At present the game does not call this if colliding
-        with the player.
-        """
-        self.pub('enemy_died', self)
-        enemyDeadSound.play()
-        self.kill()
-
-    def shot_check(self):
-        """If cooldown == 0 and roll >= obj.shotrate, fires."""
-        self.cooldown -= 1
-        roll = random.randint(1, self.shotrate)
-        if self.cooldown <= 0 and roll >= self.shotrate:
-            self.fire()
-                
-    def fire(self):
-        """Fires a shot in a random heading."""
-        self.pub('made_like_object', self, 
-                    Bullet, x=self.x, y=self.y, 
-                    heading=random.choice(DIR_VALS), 
-                    img=BADGUYSHOT, speed=4)
-        self.cooldown = FPS / 2
-        enemyShotSound.play()
-        
 class Scooter(Enemy):
-    def __init__(self, x, y):
-        super(Scooter, self).__init__(x, y)
+    def __init__(self, x, y, dirs):
+        super(Scooter, self).__init__(x, y, dirs, img=REDSHIPIMG)
         self.set_target_with_distance(self.range - self.counter)
     
     def update(self):
@@ -249,8 +164,8 @@ class Scooter(Enemy):
         
         
 class Sweeper(Enemy):
-    def __init__(self, x, y, img=GREENSHIPIMG, max_x=SCR_W+30, max_y=SCR_H+30):
-        super(Sweeper, self).__init__(x, y, img=img)
+    def __init__(self, x, y, dirs, img=GREENSHIPIMG, max_x=SCR_W+30, max_y=SCR_H+30):
+        super(Sweeper, self).__init__(x, y, dirs, img=img)
         self.min_xy = -30
         self.max_x = max_x
         self.max_y = max_y
@@ -267,8 +182,8 @@ class Sweeper(Enemy):
                 self.y = self.max_y - 10 if self.y <= 0 else -20
                 
 class Rammer(Enemy):
-    def __init__(self, x, y):
-        super(Rammer, self).__init__(x, y)
+    def __init__(self, x, y, dirs):
+        super(Rammer, self).__init__(x, y, dirs)
         self.speed = 2
         self.points = 300
     
@@ -276,10 +191,10 @@ class Rammer(Enemy):
         self.move_to_target(self.origin if ship.respawn else ship.pos)
         
 class Teleporter(Enemy):
-    def __init__(self, x, y, img=GREENSHIPIMG, leftlane=(15, 40), 
+    def __init__(self, x, y, dirs, img=GREENSHIPIMG, leftlane=(15, 40), 
                     rightlane=(SCR_W-40, SCR_W-15), uplane=(15, 40), 
                     downlane=(SCR_H-40, SCR_H-15)):
-        super(Teleporter, self).__init__(x, y, img=img)
+        super(Teleporter, self).__init__(x, y, dirs, img=img)
         self.speed = 2 * 2
         self.points = 200
         self.leftlane = range(leftlane[0], leftlane[1])
@@ -472,7 +387,7 @@ class Scene(object):
         pass
     
     def __enter__(self, *args, **kwargs):
-        pass
+        return self
     
     def main(self, *args, **kwargs):
         pass
@@ -489,11 +404,25 @@ class GameScene(Scene):
         self.allq = pygame.sprite.Group()
         self.spriteq = pygame.sprite.Group()
         self.textq = pygame.sprite.Group()
+        self.bulletq = pygame.sprite.Group()
         self.visuals = self.spriteq, self.textq
         for topic in ['made_like_object', 'made_object', 
                         'player_fired', 'player_died', 'got_1up',
-                        'enemy_died']:
+                        'enemy_died', 'enemy_fired']:
             subscribe(self, topic)
+    
+    def add_obj(self, *news):
+        for new_obj in news:
+            target_qs = [self.allq]
+            if isinstance(new_obj, TextObj):
+                target_qs.append(self.textq)
+            else:
+                target_qs.append(self.spriteq)
+                
+            if isinstance(new_obj, Bullet):
+                target_qs.append(self.bulletq)
+            
+            new_obj.add(*target_qs)
         
     def made_like_object(self, sender, objtype, **kwargs):
         """Creates new object and places it in
@@ -516,6 +445,11 @@ class GameScene(Scene):
         self.made_like_object(player, Bullet, 
                 x=player.x, y=player.y, heading=heading)
     
+    def enemy_fired(self, enemy):
+        self.made_like_object(enemy, Bullet,
+                x=enemy.x, y=enemy.y, heading=random.choice(DIR_VALS),
+                img=BADGUYSHOT, speed=4)
+    
     def player_died(self, player):
         rads = math.atan2(player.heading[1], player.heading[0])
         degs = math.degrees(rads)
@@ -529,7 +463,7 @@ class GameScene(Scene):
             new_y = top_y if piece[1] == 0 else top_y + half_h
             self.made_object(player, 
                     ShipPiece, x=new_x, y=new_y,
-                    img_piece=CurrentImg.subsurface(BustedRect),
+                    img=CurrentImg.subsurface(BustedRect),
                     heading=DIR_DIAGS[index])
                     
     def enemy_died(self, enemy):
@@ -542,15 +476,6 @@ class GameScene(Scene):
     def got_1up(self, player):
         self.made_object(player, RiseText, 
                 x=player.x, y=player.y, color=(50, 200, 50), text='1UP')
-        
-    def add_obj(self, *news):
-        for new_obj in news:
-            target_qs = [self.allq]
-            if isinstance(new_obj, TextObj):
-                target_qs.append(self.textq)
-            else:
-                target_qs.append(self.spriteq)
-            new_obj.add(*target_qs)
         
     def __exit__(self, *args):
         for obj in [self] + self.allq.sprites() + self.textq.sprites():
@@ -568,7 +493,7 @@ class IntroScene(GameScene):
         
         menu_txt = ['Press any key to play', 
                     'Mouse moves ship',
-                    '10-keypad fires in 8 headings']
+                    '10-key fires in 8 directions']
         Menu = MultiText(all_texts=menu_txt, font=self.menu_font, 
                             color=GREEN, switch=(FPS * 1.15))
         Menu.pin_at('center', (SCR_W / 2, (SCR_H / 2) + 100))
@@ -638,6 +563,7 @@ class LevelScene(GameScene):
                     self.player, PlayerSights)
         self.goodq.add(self.player)
         return self
+        
     
     def setup(self):
         world, stage = [i + 1 for i in divmod(self.lvl, 4)]
@@ -658,7 +584,10 @@ class LevelScene(GameScene):
             variance = random.randint(0, world)
             safex = range(10, (shipX - 25)) + range((shipX + 25), (SCR_W - 10))
             safey = range(10, (shipY - 25)) + range((shipY + 25), (SCR_H - 10))
-            NewEnemy = random.choice(kinds_of_AI)(x=random.choice(safex), y=random.choice(safey))
+            NewEnemy = random.choice(kinds_of_AI)(
+                            x=random.choice(safex), 
+                            y=random.choice(safey),
+                            dirs=random.choice(DIR_VALS))
             NewEnemy.speed = int(math.floor(NewEnemy.speed * (1.05 ** variance)))
             NewEnemy.points = int(math.floor(NewEnemy.points + ((NewEnemy.points / 10) * variance)))
             NewEnemy.add(self.badq)
@@ -701,6 +630,9 @@ class LevelScene(GameScene):
                             badguy.got_hit()
                             if badguy not in self.badq and badguy.points:
                                 self.player.score += badguy.points
+            for shot in self.bulletq:
+                if is_out_of_bounds(shot.pos, offset=40):
+                    shot.kill()
             if not self.player.lives:
                 self.state = 'gameover'
             elif not self.badq:

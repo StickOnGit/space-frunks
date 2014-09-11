@@ -5,7 +5,7 @@ class ShipPiece(ListenSprite):
         super(ShipPiece, self).__init__(x, y, img)
         self.heading = heading
         self.speed = 1 * 2
-        self.counter = int(FPS * 0.75)
+        self.counter = int(30 * 0.75)
         self.opacity = 127
         self.do_rotate = False
     

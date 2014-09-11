@@ -3,7 +3,7 @@ from tenfwd import publish, subscribe, unsub, unsub_all
 from math import sqrt
 
 class ListenSprite(sprite.Sprite):
-    def __init__(self, x=1, y=1, img=None, speed=0, heading=None):
+    def __init__(self, x=0, y=0, img=None, speed=0, heading=None):
         super(ListenSprite, self).__init__()
         self.speed = speed
         self.heading = heading or [0, 0]
