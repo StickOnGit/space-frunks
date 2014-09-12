@@ -13,12 +13,6 @@ class Enemy(ListenSprite):
         self.speed = 3 * 2
         self.cooldown = 15
         self.points = 100
-    
-    def update(self):
-        """A hook for new movements. 
-        Replace this with new logic to change enemy behavior.
-        """
-        raise NotImplementedError
         
     def bounce(self):
         self.heading = [-i for i in self.heading]

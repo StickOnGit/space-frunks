@@ -22,6 +22,7 @@ from code.multitext import MultiText
 from code.shippiece import ShipPiece
 from code.playermouse import PlayerMouse
 from code.enemy import Enemy
+from code.scooter import Scooter
 from os import path
 try:
     import cPickle as pickle
@@ -81,7 +82,7 @@ GOT_1UP = 5000
 TESTING = False
 
 pygame.display.set_mode((SCR_W, SCR_H))
-pygame.mouse.set_visible(0)
+pygame.mouse.set_visible(False)
 
 try:    #either load hi-score list, or create a default list
     with open('scores.py', 'r') as f:
@@ -141,17 +142,16 @@ BOOMONE = ALLSHEET.image_at((0, 96, 32, 32), -1)
 BOOMTWO = ALLSHEET.image_at((32, 96, 32, 32), -1)
 BOOMTHR = ALLSHEET.image_at((64, 96, 32, 32), -1)
 BOOMFOR = ALLSHEET.image_at((96, 96, 32, 32), -1)
-BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR]
-
+BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR, pygame.Surface((32, 32)).convert()]
+"""
 class Scooter(Enemy):
     def __init__(self, x, y, dirs):
         super(Scooter, self).__init__(x, y, dirs, img=REDSHIPIMG)
         self.set_target_with_distance(self.range - self.counter)
     
     def update(self):
-        """ Scoots back and forth.
-        self.counter += 1 until > self.range, then reverse.
-        """
+        #Scoots back and forth.
+        #self.counter += 1 until > self.range, then reverse.
         if (self.counter >= self.range or 
                 is_out_of_bounds(self.pos) or 
                 self.pos == self.target):
@@ -161,7 +161,7 @@ class Scooter(Enemy):
         self.move_to_target(self.target)
         self.counter += self.speed
         self.shot_check()
-        
+"""     
         
 class Sweeper(Enemy):
     def __init__(self, x, y, dirs, img=GREENSHIPIMG, max_x=SCR_W+30, max_y=SCR_H+30):
@@ -406,10 +406,13 @@ class GameScene(Scene):
         self.textq = pygame.sprite.Group()
         self.bulletq = pygame.sprite.Group()
         self.visuals = self.spriteq, self.textq
-        for topic in ['made_like_object', 'made_object', 
-                        'player_fired', 'player_died', 'got_1up',
-                        'enemy_died', 'enemy_fired']:
-            subscribe(self, topic)
+        self.sub_to_msgs('made_like_object', 'made_object',
+                            'player_fired', 'player_died', 'got_1up',
+                            'enemy_died', 'enemy_fired')
+    
+    def sub_to_msgs(self, *msgs):
+        for msg in msgs:
+            subscribe(self, msg)
     
     def add_obj(self, *news):
         for new_obj in news:
@@ -518,49 +521,59 @@ class LevelScene(GameScene):
         self.pts_font = pygame.font.Font('freesansbold.ttf', 10)
         self.gameover_font = pygame.font.Font('freesansbold.ttf', 36)
         self.go_to_gameover = FPS * 3
+        self.setup_textobjs()
+        self.sub_to_msgs('ship_set_score', 'ship_set_lives', 'set_lvl_txt',
+                            'gameover_show', 'gameover_hide')
+        
+    def setup_textobjs(self):
+        self.scoretxt = TextObj(text='Score:', color=WHITE, font=self.score_font)
+        self.scorenum = TextObj(text=publish_with_results('give', 'last_score')[0], 
+                            color=WHITE, font=self.score_font)
+        self.livestxt = TextObj(text='Lives:', color=WHITE, font=self.score_font)
+        self.livesnum = TextObj(text=publish_with_results('give', 'last_lives')[0], 
+                            color=WHITE, font=self.score_font)
+        self.leveltxt = TextObj(text='', color=WHITE, font=self.score_font)
+        
+        self.gameovertxt = TextObj(text='  '.join("GAME OVER"), 
+                                font=self.gameover_font)
+        
+        
+        self.scoretxt.pin_at('topleft', (15, 15))
+        self.scorenum.pin_at('topleft', (self.scoretxt.rect.topright[0] + 5, 
+                                        self.scoretxt.rect.topright[1]))
+        
+        self.livestxt.pin_at('topright', (SCR_W - (SCR_W / 19), 15))
+        self.livesnum.pin_at('topleft', (self.livestxt.rect.topright[0] + 5, 
+                                        self.livestxt.rect.topright[1]))
+        
+        self.leveltxt.pin_at('center', (SCR_W / 2, SCR_H / 20))
+        self.gameovertxt.pin_at('center', (SCR_W / 2, SCR_H / 2))
+        self.gameovertxt.hide()
+    
+    def ship_set_score(self, score):
+        self.scorenum.set_text(score)
+        
+    def ship_set_lives(self, lives):
+        self.livesnum.set_text(lives)
+        
+    def set_lvl_txt(self, lvl):
+        self.leveltxt.set_text(lvl)
+    
+    def gameover_show(self, rate):
+        self.gameovertxt.show(rate)
+        
+    def gameover_hide(self, rate):
+        self.gameovertxt.hide(rate)
         
     def __enter__(self, *args):
-        ScoreTxt = TextObj(text='Score:', color=WHITE, font=self.score_font)
-        ScoreNum = TextObj(text=publish_with_results('give', 'last_score')[0], 
-                            color=WHITE, font=self.score_font)
-        LivesTxt = TextObj(text='Lives:', color=WHITE, font=self.score_font)
-        LivesNum = TextObj(text=publish_with_results('give', 'last_lives')[0], 
-                            color=WHITE, font=self.score_font)
-        LevelTxt = TextObj(text='', color=WHITE, font=self.score_font)
-        
-        GameoverTxt = TextObj(text='  '.join("GAME OVER"), 
-                                font=self.gameover_font)
-        ScoreTxt.pin_at('topleft', (15, 15))
-        ScoreNum.pin_at('topleft', (ScoreTxt.rect.topright[0] + 5, 
-                                    ScoreTxt.rect.topright[1]))
-        
-        LivesTxt.pin_at('topright', (SCR_W - (SCR_W / 19), 15))
-        LivesNum.pin_at('topleft', (LivesTxt.rect.topright[0] + 5, 
-                                    LivesTxt.rect.topright[1]))
-        
-        LevelTxt.pin_at('center', (SCR_W / 2, SCR_H / 20))
-        GameoverTxt.pin_at('center', (SCR_W / 2, SCR_H / 2))
-        GameoverTxt.hide()
-        
-        ScoreNum.ship_set_score = ScoreNum.set_text
-        ScoreNum.sub('ship_set_score')
-        LivesNum.ship_set_lives = LivesNum.set_text
-        LivesNum.sub('ship_set_lives')
-        LevelTxt.set_lvl_txt = LevelTxt.set_text
-        LevelTxt.sub('set_lvl_txt')
-        GameoverTxt.gameover_show = GameoverTxt.show
-        GameoverTxt.sub('gameover_show')
-        GameoverTxt.gameover_hide = GameoverTxt.hide
-        GameoverTxt.sub('gameover_hide')
-        
         start_x, start_y = pygame.display.get_surface().get_rect().center
         pygame.mouse.set_pos([start_x, start_y])
         
         self.player = Player(start_x, start_y, PLAYERSHIPIMG, KEY_VAL, GOT_1UP)
         PlayerSights = PlayerMouse(start_x, start_y, bound_to=self.player)
-        self.add_obj(ScoreTxt, ScoreNum, LivesTxt, 
-                    LivesNum, LevelTxt, GameoverTxt, 
-                    self.player, PlayerSights)
+        self.add_obj(self.scoretxt, self.scorenum, self.livestxt,
+                        self.livesnum, self.leveltxt, self.gameovertxt,
+                        self.player, PlayerSights)
         self.goodq.add(self.player)
         return self
         
@@ -587,6 +600,7 @@ class LevelScene(GameScene):
             NewEnemy = random.choice(kinds_of_AI)(
                             x=random.choice(safex), 
                             y=random.choice(safey),
+                            img=REDSHIPIMG,
                             dirs=random.choice(DIR_VALS))
             NewEnemy.speed = int(math.floor(NewEnemy.speed * (1.05 ** variance)))
             NewEnemy.points = int(math.floor(NewEnemy.points + ((NewEnemy.points / 10) * variance)))
@@ -598,9 +612,9 @@ class LevelScene(GameScene):
     def main(self, events):
         if self.state == 'gameover':
             if self.go_to_gameover in (90, 45):
-                publish('gameover_show', 45)
+                self.gameovertxt.show(45)
             if self.go_to_gameover in (78, 23):
-                publish('gameover_hide', 45)
+                self.gameovertxt.hide(45)
             self.go_to_gameover -= 1
             if self.go_to_gameover <= 0:
                 publish('save', 'last_score', self.player.score)
@@ -633,6 +647,9 @@ class LevelScene(GameScene):
             for shot in self.bulletq:
                 if is_out_of_bounds(shot.pos, offset=40):
                     shot.kill()
+            for badguy in self.badq:
+                if is_out_of_bounds(badguy.pos, offset=30):
+                    badguy.out_of_bounds()
             if not self.player.lives:
                 self.state = 'gameover'
             elif not self.badq:

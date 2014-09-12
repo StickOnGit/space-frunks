@@ -14,7 +14,6 @@ class Bullet(ListenSprite):
     def update(self):
         self.move()
         self.counter += self.speed
-        #if is_out_of_bounds(self.pos, offset=50) or self.counter > self.range:
         if self.counter > self.range:
             self.kill()
 

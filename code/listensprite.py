@@ -13,6 +13,14 @@ class ListenSprite(sprite.Sprite):
         self.image = img or Surface((16, 16)).convert()
         self._xy = [x, y]
         self.rect = self.set_rect()
+    
+    
+    def out_of_bounds(self, *args):
+        """Called when the object is off-screen.
+        Each object could handle this differently; by default,
+        does nothing.
+        """
+        pass
         
     def set_rect(self):
         return self.image.get_rect(center=self._xy)
