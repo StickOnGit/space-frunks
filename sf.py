@@ -556,14 +556,14 @@ class LevelScene(GameScene):
     def ship_set_lives(self, lives):
         self.livesnum.set_text(lives)
         
-    def set_lvl_txt(self, lvl):
-        self.leveltxt.set_text(lvl)
+    #def set_lvl_txt(self, lvl):
+    #    self.leveltxt.set_text(lvl)
     
-    def gameover_show(self, rate):
-        self.gameovertxt.show(rate)
+    #def gameover_show(self, rate):
+    #    self.gameovertxt.show(rate)
         
-    def gameover_hide(self, rate):
-        self.gameovertxt.hide(rate)
+    #def gameover_hide(self, rate):
+    #    self.gameovertxt.hide(rate)
         
     def __enter__(self, *args):
         start_x, start_y = pygame.display.get_surface().get_rect().center
@@ -580,8 +580,7 @@ class LevelScene(GameScene):
     
     def setup(self):
         world, stage = [i + 1 for i in divmod(self.lvl, 4)]
-        enemies = 2 + world
-        publish('set_lvl_txt', 'Level {} - {}'.format(world, stage))
+        self.leveltxt.set_text('Level {} - {}'.format(world, stage))
         
         shipX, shipY = [int(i) for i in self.player.pos] #range() needs ints
         possibleAI = {1:[Scooter, Scooter],
@@ -593,6 +592,8 @@ class LevelScene(GameScene):
             kinds_of_AI.append(Teleporter)
         if world >= 4:
             kinds_of_AI.append(Rammer)
+        
+        enemies = 2 + world
         for i in xrange(0, enemies):
             variance = random.randint(0, world)
             safex = range(10, (shipX - 25)) + range((shipX + 25), (SCR_W - 10))
@@ -664,20 +665,25 @@ class GameOverScene(GameScene):
         self.state = 'build_scores'
         self.player_initials = ''
         self.ship_score = publish_with_results('give', 'last_score')[0] or 0
+        self.setup_txtobjs()
+        
+    def setup_txtobjs(self):
+        self.initials = TextObj(text='', color=WHITE, 
+                                pinned_to=('center', (SCR_W/2, SCR_H/2)))
+        self.congrats = TextObj(text='High Score! Enter your name, frunk destroyer.', 
+                                pinned_to=('center', (SCR_W / 2, SCR_H / 10)))
+        
+        self.initials.hide()
+        self.congrats.hide()
+                                
+        self.add_obj(self.initials, self.congrats)
         
     def __enter__(self, *args):
         if self.ship_score > scoreList[-1][1]:
             self.state = 'get_score'
-        
-        Initials = TextObj(text='', color=WHITE)
-        Initials.pin_at('center', (SCR_W / 2, SCR_H / 2))
-        Initials.got_initial = Initials.set_text
-        Initials.sub('got_initial')
-        
-        Congrats = TextObj(text='High score!  Enter your name, frunk destroyer.')
-        Congrats.pin_at('center', (SCR_W / 2, SCR_H / 10))
-        
-        self.add_obj(Initials, Congrats)
+            self.initials.show()
+            self.congrats.show()
+            
         pygame.mixer.music.load(path.join('sounds', 'gameover.wav'))
         pygame.mixer.music.set_volume(0.1)
         pygame.mixer.music.play(-1)
@@ -695,7 +701,7 @@ class GameOverScene(GameScene):
                     next_char = str(event.unicode)
                     if next_char.isalnum():    #only letters/numbers
                         self.player_initials += next_char.upper()
-                        publish('got_initial', self.player_initials)
+                        self.initials.set_text(self.player_initials)
                         if len(self.player_initials) == 3:
                             scoreList.append([self.player_initials, self.ship_score])
                             scoreList.sort(key=lambda x: x[1])
@@ -705,12 +711,17 @@ class GameOverScene(GameScene):
                             self.state = 'build_scores'
         if self.state == 'build_scores':
             for txt in self.textq:
-                txt.kill()
+                if not txt.opacity == 0:
+                    txt.hide(15)
             for i, name_num in enumerate(scoreList):
                 x, y = (SCR_W / 3, ((SCR_H + 150) / 8) * (i + 1))
                 rgb = (50, 200 - (30 * i), 50)
                 Name = TextObj(x, y, name_num[0], rgb)
                 HiScore = TextObj(x * 2, y, name_num[1], rgb)
+                Name.hide()
+                HiScore.hide()
+                Name.show(30)
+                HiScore.show(30)
                 self.add_obj(Name, HiScore)
             self.state = 'show_scores'
         self.allq.update()
@@ -718,9 +729,8 @@ class GameOverScene(GameScene):
         
     def __exit__(self, *args):
         pygame.mixer.music.stop()
-        pickleScore = pickle.dumps(scoreList)
         with open('scores.py', 'w') as f:
-            f.write(pickleScore)
+            f.write(pickle.dumps(scoreList))
         super(GameOverScene, self).__exit__(*args)
 
 class Screen(object):
