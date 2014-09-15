@@ -72,11 +72,9 @@ class ListenSprite(sprite.Sprite):
     
     def set_heading(self, target):
         self.heading = [i / abs(i) if i != 0 else 0 for i in [a - b for a, b in zip(target, self.pos)]]
-        if not 0 in self.heading:
-            self.heading = [i * (sqrt(2) / 2) for i in self.heading]
             
-    def set_target_with_distance(self, distance):
-        self.target = [a + (b * distance) for a, b in zip(self.pos, self.heading)]
+    def set_target_with_distance(self, dist):
+        self.target = [a + (b * dist) for a, b in zip(self.pos, self.heading)]
 
     def move(self):
         self.pos = [a + (self.speed * b) for a, b in zip(self.pos, self.heading)]
@@ -103,10 +101,16 @@ class ListenSprite(sprite.Sprite):
         unsub(self, message)
         
     def hide(self, frames=1, target=0):
-        self.pub('add_to_fade_q', self, self.opacity, target, frames)
+        if frames == 1 and target == 0:
+            self.opacity = 0
+        else:
+            self.pub('add_to_fade_q', self, self.opacity, target, frames)
     
     def show(self, frames=1, target=255):
-        self.pub('add_to_fade_q', self, self.opacity, target, frames)
+        if frames == 1 and target == 255:
+            self.opacity = 255
+        else:
+            self.pub('add_to_fade_q', self, self.opacity, target, frames)
 
     def kill(self):
         unsub_all(self)

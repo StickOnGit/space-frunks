@@ -5,8 +5,9 @@ class MultiText(TextObj):
     Changes when its counter is >= its switch value.
     """
     def __init__(self, x=0, y=0, all_texts=None, 
-                    color=None, font=None, switch=60):
-        super(MultiText, self).__init__(x, y, None, color, font)
+                    color=None, font=None, switch=60, 
+                    pinned_to=(None, None)):
+        super(MultiText, self).__init__(x, y, None, color, font, pinned_to)
         self.all_texts = self.set_all_texts(all_texts or [text])
         self.counter = 0
         self.switch = int(switch)

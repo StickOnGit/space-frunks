@@ -53,14 +53,14 @@ WHITE = (255, 255, 255)
 Rt2 = math.sqrt(2)
 Pt7 = 1.0 / Rt2
 
-UP = (0, -1)
-DOWN = (0, 1)
-LEFT = (-1, 0)
-RIGHT = (1, 0)
-UPLEFT = (-Pt7, -Pt7)
-UPRIGHT = (Pt7, -Pt7)
-DOWNLEFT = (-Pt7, Pt7)
-DOWNRIGHT = (Pt7, Pt7)
+UP = [0, -1]
+DOWN = [0, 1]
+LEFT = [-1, 0]
+RIGHT = [1, 0]
+UPLEFT = [-Pt7, -Pt7]
+UPRIGHT = [Pt7, -Pt7]
+DOWNLEFT = [-Pt7, Pt7]
+DOWNRIGHT = [Pt7, Pt7]
 
 KEY_VAL = {
             pygame.K_KP8: UP,
@@ -489,19 +489,21 @@ class IntroScene(GameScene):
         super(IntroScene, self).__init__()
         self.title_font = pygame.font.Font('freesansbold.ttf', 32)
         self.menu_font = pygame.font.Font('freesansbold.ttf', 18)
+        self.setup_textobjs()
         
-    def __enter__(self, *args):
-        Title = TextObj(text='Space Frunks', font=self.title_font)
-        Title.pin_at('center', (SCR_W / 2, (SCR_H / 2) - 100))
+    def setup_textobjs(self):
+        self.titletxt = TextObj(text='Space Frunks', font=self.title_font,
+                                pinned_to=('center', (SCR_W / 2, (SCR_H / 2) - 100)))
         
-        menu_txt = ['Press any key to play', 
-                    'Mouse moves ship',
-                    '10-key fires in 8 directions']
-        Menu = MultiText(all_texts=menu_txt, font=self.menu_font, 
-                            color=GREEN, switch=(FPS * 1.15))
-        Menu.pin_at('center', (SCR_W / 2, (SCR_H / 2) + 100))
-        self.add_obj(Title, Menu)
-        return self
+        menu_list = ["Press any key to play",
+                    "Mouse moves ship",
+                    "10-key fires in 8 directions"]
+        
+        self.menutxt = MultiText(all_texts=menu_list, font=self.menu_font,
+                                color=GREEN, switch=(FPS * 1.15), 
+                                pinned_to=('center', (SCR_W / 2, (SCR_H / 2) + 100)))
+        
+        self.add_obj(self.titletxt, self.menutxt)
     
     def main(self, events):
         for event in events:
@@ -555,15 +557,6 @@ class LevelScene(GameScene):
         
     def ship_set_lives(self, lives):
         self.livesnum.set_text(lives)
-        
-    #def set_lvl_txt(self, lvl):
-    #    self.leveltxt.set_text(lvl)
-    
-    #def gameover_show(self, rate):
-    #    self.gameovertxt.show(rate)
-        
-    #def gameover_hide(self, rate):
-    #    self.gameovertxt.hide(rate)
         
     def __enter__(self, *args):
         start_x, start_y = pygame.display.get_surface().get_rect().center
@@ -665,6 +658,8 @@ class GameOverScene(GameScene):
         self.state = 'build_scores'
         self.player_initials = ''
         self.ship_score = publish_with_results('give', 'last_score')[0] or 0
+        self.get_score_q = pygame.sprite.Group()
+        self.show_scores_q = pygame.sprite.Group()
         self.setup_txtobjs()
         
     def setup_txtobjs(self):
@@ -673,16 +668,14 @@ class GameOverScene(GameScene):
         self.congrats = TextObj(text='High Score! Enter your name, frunk destroyer.', 
                                 pinned_to=('center', (SCR_W / 2, SCR_H / 10)))
         
-        self.initials.hide()
-        self.congrats.hide()
-                                
+        self.get_score_q.add(self.initials, self.congrats)
         self.add_obj(self.initials, self.congrats)
+        [obj.hide() for obj in self.get_score_q]
         
     def __enter__(self, *args):
         if self.ship_score > scoreList[-1][1]:
             self.state = 'get_score'
-            self.initials.show()
-            self.congrats.show()
+            [obj.show() for obj in self.get_score_q]
             
         pygame.mixer.music.load(path.join('sounds', 'gameover.wav'))
         pygame.mixer.music.set_volume(0.1)
@@ -692,6 +685,9 @@ class GameOverScene(GameScene):
     def main(self, events):
         """Gets initials if you earned a hi-score. Displays scores."""
         if self.state == 'show_scores':
+            for obj in self.show_scores_q:
+                if obj.opacity == 0:
+                    obj.show(30)
             for event in events:
                 if event.type == pygame.KEYDOWN:
                     return False
@@ -709,10 +705,9 @@ class GameOverScene(GameScene):
                             while len(scoreList) > 5:
                                 scoreList.pop()
                             self.state = 'build_scores'
+                            for obj in self.get_score_q:
+                                obj.hide(30)
         if self.state == 'build_scores':
-            for txt in self.textq:
-                if not txt.opacity == 0:
-                    txt.hide(15)
             for i, name_num in enumerate(scoreList):
                 x, y = (SCR_W / 3, ((SCR_H + 150) / 8) * (i + 1))
                 rgb = (50, 200 - (30 * i), 50)
@@ -720,8 +715,7 @@ class GameOverScene(GameScene):
                 HiScore = TextObj(x * 2, y, name_num[1], rgb)
                 Name.hide()
                 HiScore.hide()
-                Name.show(30)
-                HiScore.show(30)
+                self.show_scores_q.add(Name, HiScore)
                 self.add_obj(Name, HiScore)
             self.state = 'show_scores'
         self.allq.update()
@@ -764,21 +758,25 @@ class Screen(object):
                 self.view.fill(self.bgcolor, s.rect)
                 
     def apply_fx(self, visuals):
+        #to_update = []
         for g in (self.bg.starfield, visuals[0], visuals[1]):
             for s in g.sprites():
                 if s in self.fade_q:
                     self.fade_img(s)
                 if s.visible:
-                    img_and_rect = [s.image, s.rect]
+                    TempImg, TempRect = s.image, s.rect
                     if s.opacity != 255:
-                        NewImg = pygame.Surface(img_and_rect[1].size).convert()
-                        NewImg.blit(img_and_rect[0], (0, 0))
+                        NewImg = pygame.Surface(TempRect.size).convert()
+                        NewImg.blit(TempImg, (0, 0))
                         NewImg.set_alpha(s.opacity)
-                        img_and_rect[0] = NewImg
+                        TempImg = NewImg
                     if s.do_rotate:
-                        NewImg = self.rotate_img(img_and_rect[0], s.rotation)
-                        img_and_rect = [NewImg, NewImg.get_rect(center=s.pos)]
-                    self.view.blit(*img_and_rect)
+                        NewImg = self.rotate_img(TempImg, s.rotation)
+                        TempImg, TempRect = NewImg, NewImg.get_rect(center=s.pos)
+                    self.view.blit(TempImg, TempRect)
+                    yield s.rect
+        #pygame.display.update(to_update)
+        #return to_update
 
 def GameLoop():
     FPSCLOCK = pygame.time.Clock()
@@ -794,8 +792,8 @@ def GameLoop():
                     for e in events:
                         if e.type == pygame.QUIT:
                             return False
-                    View.apply_fx(CurrentScene.visuals)
-                    pygame.display.flip()
+                    pygame.display.update(tuple(View.apply_fx(CurrentScene.visuals)))
+                    #pygame.display.flip()
                     FPSCLOCK.tick(FPS)
                     View.clear(CurrentScene.visuals)
                     View.bg.update()
