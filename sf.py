@@ -766,7 +766,7 @@ class Screen(object):
                 if s.visible:
                     TempImg, TempRect = s.image, s.rect
                     if s.opacity != 255:
-                        NewImg = pygame.Surface(TempRect.size).convert()
+                        NewImg = pygame.Surface(TempRect.size)
                         NewImg.blit(TempImg, (0, 0))
                         NewImg.set_alpha(s.opacity)
                         TempImg = NewImg
@@ -774,7 +774,8 @@ class Screen(object):
                         NewImg = self.rotate_img(TempImg, s.rotation)
                         TempImg, TempRect = NewImg, NewImg.get_rect(center=s.pos)
                     self.view.blit(TempImg, TempRect)
-                    yield s.rect
+                    #yield s.rect
+                    #to_update.append(s.rect)
         #pygame.display.update(to_update)
         #return to_update
 
@@ -792,10 +793,10 @@ def GameLoop():
                     for e in events:
                         if e.type == pygame.QUIT:
                             return False
-                    pygame.display.update(tuple(View.apply_fx(CurrentScene.visuals)))
-                    #pygame.display.flip()
+                    View.apply_fx(CurrentScene.visuals)
+                    pygame.display.flip()
                     FPSCLOCK.tick(FPS)
-                    View.clear(CurrentScene.visuals)
+                    View.view.fill(BLACK)
                     View.bg.update()
                         
 
