@@ -12,7 +12,7 @@ import random
 import sys
 import spritesheet
 import math
-from code.tenfwd import subscribe, unsub, unsub_all, publish, publish_with_results
+from code.tenfwd import subscribe, unsub, unsub_all, publish, publish_with_results, Topics
 from code.listensprite import ListenSprite
 from code.player import Player
 from code.textobj import TextObj
@@ -77,7 +77,7 @@ DIR_VALS = [UP, DOWN, LEFT, RIGHT, UPLEFT, DOWNLEFT, UPRIGHT, DOWNRIGHT]
 DIR_DIAGS = [i for i in DIR_VALS if 0 not in i]
 DIR_CROSS = [i for i in DIR_VALS if 0 in i]
 
-STARTINGLEVEL = 0
+STARTINGLEVEL = 6
 GOT_1UP = 5000
 TESTING = False
 
@@ -100,15 +100,16 @@ scoreList = [('NOP', 0) for i in range(0, 5)]
 
 #helpful standalone functions that just don't go anywhere in particular yet
 
-def load_sound(pathToSound, fileName, volume=0.01):
-    """Loads sound file from relative path."""
-    newsound = pygame.mixer.Sound(path.join(pathToSound, fileName))
-    newsound.set_volume(volume)
-    return newsound
+#def load_sound(path_to_sound, filename, volume=0.01):
+#    """Loads sound file from relative path."""
+#    newsound = pygame.mixer.Sound(path.join(path_to_sound, filename))
+#    newsound.set_volume(volume)
+#    return newsound
     
 def coinflip():
     """Randomly returns either True or False."""
-    return random.choice((True, False))
+    #return random.choice((True, False))
+    return random.random() > 0.5
 
 def is_out_of_bounds(objXY, offset=15, w=SCR_W, h=SCR_H):
     """Used to see if an object has gone too far
@@ -120,14 +121,35 @@ def is_out_of_bounds(objXY, offset=15, w=SCR_W, h=SCR_H):
     
 def collide_hit_rect(one, two):
     return one.hit_rect.colliderect(two.hit_rect)
-    
 
-#loads sounds(but not music... it's handled differently)
-enemyDeadSound = load_sound('sounds', 'enemydead.wav')
-playerDeadSound = load_sound('sounds', 'playerdead.wav')
-teleportSound = load_sound('sounds', 'teleport.wav')
-enemyShotSound = load_sound('sounds', 'enemyshot.wav')
-playerShotSound = load_sound('sounds', 'playershot.wav')
+class SoundPlayer(object):
+    def __init__(self, volume=0.1):
+        self.sounds = {'player_fired': self.load_snd('playershot.wav'),
+                        'player_died': self.load_snd('playerdead.wav'),
+                        'teleported': self.load_snd('teleport.wav'),
+                        'enemy_fired': self.load_snd('enemyshot.wav'),
+                        'enemy_died': self.load_snd('enemydead.wav')}
+                        
+        self.volume = volume
+        
+        subscribe(self, 'play_sound')
+        
+    def load_snd(self, filename, path_to_sound='sounds', volume=None):
+        """Loads sound file from relative path.
+        Looks in /sounds folder by default.
+        """
+        newsound = pygame.mixer.Sound(path.join(path_to_sound, filename))
+        if volume is not None:
+            newsound.set_volume(volume)
+        return newsound
+    
+    def play_sound(self, sound):
+        try:
+            noise = self.sounds[sound]
+            noise.set_volume(self.volume)
+            noise.play()
+        except KeyError:
+            print "**OH NO** No sound detected for {}".format(sound)
 
 #load spritesheet
 ALLSHEET = spritesheet.spritesheet('imgs/sheet.png')
@@ -241,7 +263,7 @@ class Teleporter(Enemy):
             self.heading = random.choice(new_dirs)
             self.counter = FPS * 3
             self.show(frames=FPS/2)
-            teleportSound.play()
+            publish('play_sound', 'teleported') #will change
 
 class Bullet(ListenSprite):
     """Bullet object. When it hits things, they blows up."""
@@ -409,6 +431,11 @@ class GameScene(Scene):
         self.sub_to_msgs('made_like_object', 'made_object',
                             'player_fired', 'player_died', 'got_1up',
                             'enemy_died', 'enemy_fired')
+                            
+    def play_sound(func):
+        def _inner(*a, **k):
+            return func(*a, **k), publish('play_sound', func.__name__)
+        return _inner
     
     def sub_to_msgs(self, *msgs):
         for msg in msgs:
@@ -443,16 +470,19 @@ class GameScene(Scene):
         """
         NewObj = objtype(**kwargs)
         self.add_obj(NewObj)
-        
+    
+    @play_sound
     def player_fired(self, player, heading):
         self.made_like_object(player, Bullet, 
                 x=player.x, y=player.y, heading=heading)
     
+    @play_sound
     def enemy_fired(self, enemy):
         self.made_like_object(enemy, Bullet,
                 x=enemy.x, y=enemy.y, heading=random.choice(DIR_VALS),
                 img=BADGUYSHOT, speed=4)
     
+    @play_sound
     def player_died(self, player):
         rads = math.atan2(player.heading[1], player.heading[0])
         degs = math.degrees(rads)
@@ -469,6 +499,7 @@ class GameScene(Scene):
                     img=CurrentImg.subsurface(BustedRect),
                     heading=DIR_DIAGS[index])
                     
+    @play_sound
     def enemy_died(self, enemy):
         self.made_object(enemy, 
                     Explosion, x=enemy.x, y=enemy.y, imgs=BOOMLIST,
@@ -773,7 +804,7 @@ class Screen(object):
                     if s.do_rotate:
                         NewImg = self.rotate_img(TempImg, s.rotation)
                         TempImg, TempRect = NewImg, NewImg.get_rect(center=s.pos)
-                    self.view.blit(TempImg, TempRect)
+                    yield self.view.blit(TempImg, TempRect)
                     #yield s.rect
                     #to_update.append(s.rect)
         #pygame.display.update(to_update)
@@ -782,8 +813,9 @@ class Screen(object):
 def GameLoop():
     FPSCLOCK = pygame.time.Clock()
     Keeper = StatKeeper()
-    View = Screen()
+    MyDisplay = Screen()
     AllScenes = (IntroScene, LevelScene, GameOverScene)
+    SP = SoundPlayer()
     while True:
         for S in AllScenes:
             with S() as CurrentScene:
@@ -793,11 +825,41 @@ def GameLoop():
                     for e in events:
                         if e.type == pygame.QUIT:
                             return False
-                    View.apply_fx(CurrentScene.visuals)
+                    [None for i in MyDisplay.apply_fx(CurrentScene.visuals)]
                     pygame.display.flip()
                     FPSCLOCK.tick(FPS)
-                    View.view.fill(BLACK)
-                    View.bg.update()
+                    MyDisplay.view.fill(BLACK)
+                    MyDisplay.bg.update()
+                for k, v in Topics.iteritems():
+                    if len(v) > 1:
+                        print "{}: {}".format(k, len(v))
+
+def AltGameLoop():
+    """Works fine on OS X, but not in Ubuntu??"""
+    FPSCLOCK = pygame.time.Clock()
+    Keeper = StatKeeper()
+    MyDisplay = Screen()
+    AllScenes = (IntroScene, LevelScene, GameOverScene)
+    SP = SoundPlayer()
+    while True:
+        for S in AllScenes:
+            with S() as CurrentScene:
+                events = []
+                while CurrentScene(events):
+                    events = pygame.event.get()
+                    for e in events:
+                        if e.type == pygame.QUIT:
+                            return False
+                    ##leaves tracers in Ubuntu
+                    ##but looks fine in OS X
+                    ##what is this, self % 2 == 1 :(
+                    pygame.display.update(tuple(MyDisplay.apply_fx(CurrentScene.visuals)))
+                    #pygame.display.flip()
+                    FPSCLOCK.tick(FPS)
+                    #MyDisplay.clear(CurrentScene.visuals)
+                    MyDisplay.view.fill(BLACK)
+                    MyDisplay.bg.update()
+                        
                         
 
 if __name__ == "__main__":
