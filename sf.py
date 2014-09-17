@@ -830,6 +830,8 @@ def GameLoop():
                     FPSCLOCK.tick(FPS)
                     MyDisplay.view.fill(BLACK)
                     MyDisplay.bg.update()
+                #just to ensure there aren't too many listeners left over
+                #this will go away at some point
                 for k, v in Topics.iteritems():
                     if len(v) > 1:
                         print "{}: {}".format(k, len(v))
