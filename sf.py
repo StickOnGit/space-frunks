@@ -15,6 +15,7 @@ import math
 from code.tenfwd import subscribe, unsub, unsub_all, publish, publish_with_results, Topics
 from code.listensprite import ListenSprite
 from code.player import Player
+from code.bullet import Bullet
 from code.textobj import TextObj
 from code.risetext import RiseText
 from code.explosion import Explosion
@@ -99,16 +100,9 @@ except:
 scoreList = [('NOP', 0) for i in range(0, 5)]
 
 #helpful standalone functions that just don't go anywhere in particular yet
-
-#def load_sound(path_to_sound, filename, volume=0.01):
-#    """Loads sound file from relative path."""
-#    newsound = pygame.mixer.Sound(path.join(path_to_sound, filename))
-#    newsound.set_volume(volume)
-#    return newsound
     
 def coinflip():
     """Randomly returns either True or False."""
-    #return random.choice((True, False))
     return random.random() > 0.5
 
 def is_out_of_bounds(objXY, offset=15, w=SCR_W, h=SCR_H):
@@ -143,13 +137,11 @@ class SoundPlayer(object):
             newsound.set_volume(volume)
         return newsound
     
-    def play_sound(self, sound):
-        try:
-            noise = self.sounds[sound]
-            noise.set_volume(self.volume)
-            noise.play()
-        except KeyError:
-            print "**OH NO** No sound detected for {}".format(sound)
+    def play_sound(self, snd):
+        sfx = self.sounds[snd] if snd in self.sounds else None
+        if sfx is not None:
+            sfx.set_volume(self.volume)
+            sfx.play()
 
 #load spritesheet
 ALLSHEET = spritesheet.spritesheet('imgs/sheet.png')
@@ -164,26 +156,7 @@ BOOMONE = ALLSHEET.image_at((0, 96, 32, 32), -1)
 BOOMTWO = ALLSHEET.image_at((32, 96, 32, 32), -1)
 BOOMTHR = ALLSHEET.image_at((64, 96, 32, 32), -1)
 BOOMFOR = ALLSHEET.image_at((96, 96, 32, 32), -1)
-BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR, pygame.Surface((32, 32)).convert()]
-"""
-class Scooter(Enemy):
-    def __init__(self, x, y, dirs):
-        super(Scooter, self).__init__(x, y, dirs, img=REDSHIPIMG)
-        self.set_target_with_distance(self.range - self.counter)
-    
-    def update(self):
-        #Scoots back and forth.
-        #self.counter += 1 until > self.range, then reverse.
-        if (self.counter >= self.range or 
-                is_out_of_bounds(self.pos) or 
-                self.pos == self.target):
-            self.counter = 0
-            self.bounce()
-            self.set_target_with_distance(self.range)
-        self.move_to_target(self.target)
-        self.counter += self.speed
-        self.shot_check()
-"""     
+BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR, pygame.Surface((32, 32)).convert()]   
         
 class Sweeper(Enemy):
     def __init__(self, x, y, dirs, img=GREENSHIPIMG, max_x=SCR_W+30, max_y=SCR_H+30):
@@ -265,26 +238,6 @@ class Teleporter(Enemy):
             self.show(frames=FPS/2)
             publish('play_sound', 'teleported') #will change
 
-class Bullet(ListenSprite):
-    """Bullet object. When it hits things, they blows up."""
-    def __init__(self, x, y, heading, img=GOODGUYSHOT, speed=8):
-        super(Bullet, self).__init__(x, y, img=img)
-        self.heading = heading
-        self.range = SCR_D + 20
-        self.counter = 0
-        self.speed = speed * 2
-        self.points = 0
-        self.do_rotate = False
-
-    def update(self):
-        self.move()
-        self.counter += self.speed
-        if is_out_of_bounds(self.pos, offset=50) or self.counter > self.range:
-            self.kill()
-
-    def got_hit(self):
-        self.kill()
-
 class Star(ListenSprite):
     def __init__(self, x, y, speed, heading):
         super(Star, self).__init__(x, y, speed=speed, heading=heading,
@@ -319,9 +272,7 @@ class Star(ListenSprite):
             color = self.color
         NewSurf = pygame.Surface((speed * 2, speed * 2))
         a = NewSurf.get_rect().center
-        b = [0, 0]
-        for i, p in enumerate(a):
-            b[i] = (a[i] + (heading[i] * -speed))
+        b = [i + (x * -speed) for i, x in zip(a, heading)]
         pygame.draw.line(NewSurf, color, a, b, 1)
         return NewSurf
     
@@ -432,7 +383,7 @@ class GameScene(Scene):
                             'player_fired', 'player_died', 'got_1up',
                             'enemy_died', 'enemy_fired')
                             
-    def play_sound(func):
+    def with_sound(func):
         def _inner(*a, **k):
             return func(*a, **k), publish('play_sound', func.__name__)
         return _inner
@@ -463,7 +414,7 @@ class GameScene(Scene):
         for group in sender.groups():
             group.add(NewObj)
         self.add_obj(NewObj)
-            
+    
     def made_object(self, sender, objtype, **kwargs):
         """Creates new object and places it 
         just in the allqueue.
@@ -471,18 +422,19 @@ class GameScene(Scene):
         NewObj = objtype(**kwargs)
         self.add_obj(NewObj)
     
-    @play_sound
+    @with_sound
     def player_fired(self, player, heading):
         self.made_like_object(player, Bullet, 
-                x=player.x, y=player.y, heading=heading)
+                x=player.x, y=player.y, img=GOODGUYSHOT, 
+                speed=15, heading=heading)
     
-    @play_sound
+    @with_sound
     def enemy_fired(self, enemy):
         self.made_like_object(enemy, Bullet,
-                x=enemy.x, y=enemy.y, heading=random.choice(DIR_VALS),
-                img=BADGUYSHOT, speed=4)
+                x=enemy.x, y=enemy.y, img=BADGUYSHOT, 
+                speed=8, heading=random.choice(DIR_VALS))
     
-    @play_sound
+    @with_sound
     def player_died(self, player):
         rads = math.atan2(player.heading[1], player.heading[0])
         degs = math.degrees(rads)
@@ -499,7 +451,7 @@ class GameScene(Scene):
                     img=CurrentImg.subsurface(BustedRect),
                     heading=DIR_DIAGS[index])
                     
-    @play_sound
+    @with_sound
     def enemy_died(self, enemy):
         self.made_object(enemy, 
                     Explosion, x=enemy.x, y=enemy.y, imgs=BOOMLIST,
@@ -789,7 +741,6 @@ class Screen(object):
                 self.view.fill(self.bgcolor, s.rect)
                 
     def apply_fx(self, visuals):
-        #to_update = []
         for g in (self.bg.starfield, visuals[0], visuals[1]):
             for s in g.sprites():
                 if s in self.fade_q:
@@ -805,10 +756,6 @@ class Screen(object):
                         NewImg = self.rotate_img(TempImg, s.rotation)
                         TempImg, TempRect = NewImg, NewImg.get_rect(center=s.pos)
                     yield self.view.blit(TempImg, TempRect)
-                    #yield s.rect
-                    #to_update.append(s.rect)
-        #pygame.display.update(to_update)
-        #return to_update
 
 def GameLoop():
     FPSCLOCK = pygame.time.Clock()
