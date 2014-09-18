@@ -305,8 +305,8 @@ class Starfield(object):
             star.image = star.set_image()
     
     def update(self):
+        self.starfield.update()
         for star in self.starfield:
-            star.update()
             if not -1 < star.x < SCR_W + 1:
                 star.y = random.randrange(0, SCR_H)
                 star.x = SCR_W + star.speed if star.x <= 0 else 0 - star.speed
@@ -489,8 +489,8 @@ class IntroScene(GameScene):
         self.add_obj(self.titletxt, self.menutxt)
     
     def main(self, events):
-        for event in events:
-            if event.type == pygame.KEYDOWN:
+        for e in events:
+            if e.type == pygame.KEYDOWN:
                 return False
         self.allq.update()
         return True
@@ -577,7 +577,7 @@ class LevelScene(GameScene):
             NewEnemy = random.choice(kinds_of_AI)(
                             x=random.choice(safex), 
                             y=random.choice(safey),
-                            img=REDSHIPIMG,
+                            img=REDSHIPIMG.copy(),
                             dirs=random.choice(DIR_VALS))
             NewEnemy.speed = int(math.floor(NewEnemy.speed * (1.05 ** variance)))
             NewEnemy.points = int(math.floor(NewEnemy.points + ((NewEnemy.points / 10) * variance)))
@@ -600,18 +600,18 @@ class LevelScene(GameScene):
             self.setup()
             self.state = 'play'
         if self.state == 'paused':
-            for event in events:
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_p:
+            for e in events:
+                if e.type == pygame.KEYDOWN:
+                    if e.key == pygame.K_p:
                         self.state = 'play'
             return True
         if self.state == 'play':
-            for event in events:
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_p:
+            for e in events:
+                if e.type == pygame.KEYDOWN:
+                    if e.key == pygame.K_p:
                         self.state = 'paused'
                     else:
-                        self.player.handle_key(event.key)
+                        self.player.handle_key(e.key)
             for goodguy in self.goodq:
                 hit_list = pygame.sprite.spritecollide(goodguy, self.badq, False, collide_hit_rect)
                 if hit_list:
@@ -621,6 +621,7 @@ class LevelScene(GameScene):
                             badguy.got_hit()
                             if badguy not in self.badq and badguy.points:
                                 self.player.score += badguy.points
+            #would be interesting to shorten this, maybe offset should be a class attribute
             for shot in self.bulletq:
                 if is_out_of_bounds(shot.pos, offset=40):
                     shot.kill()
@@ -671,13 +672,13 @@ class GameOverScene(GameScene):
             for obj in self.show_scores_q:
                 if obj.opacity == 0:
                     obj.show(30)
-            for event in events:
-                if event.type == pygame.KEYDOWN:
+            for e in events:
+                if e.type == pygame.KEYDOWN:
                     return False
         if self.state == 'get_score':
-            for event in events:
-                if event.type == pygame.KEYDOWN:
-                    next_char = str(event.unicode)
+            for e in events:
+                if e.type == pygame.KEYDOWN:
+                    next_char = str(e.unicode)
                     if next_char.isalnum():    #only letters/numbers
                         self.player_initials += next_char.upper()
                         self.initials.set_text(self.player_initials)
@@ -687,17 +688,15 @@ class GameOverScene(GameScene):
                             scoreList.reverse()
                             while len(scoreList) > 5:
                                 scoreList.pop()
+                            [obj.hide(30) for obj in self.get_score_q]
                             self.state = 'build_scores'
-                            for obj in self.get_score_q:
-                                obj.hide(30)
         if self.state == 'build_scores':
             for i, name_num in enumerate(scoreList):
                 x, y = (SCR_W / 3, ((SCR_H + 150) / 8) * (i + 1))
                 rgb = (50, 200 - (30 * i), 50)
                 Name = TextObj(x, y, name_num[0], rgb)
                 HiScore = TextObj(x * 2, y, name_num[1], rgb)
-                Name.hide()
-                HiScore.hide()
+                [obj.hide() for obj in (Name, HiScore)]
                 self.show_scores_q.add(Name, HiScore)
                 self.add_obj(Name, HiScore)
             self.state = 'show_scores'
@@ -735,10 +734,10 @@ class Screen(object):
             sprite.opacity = target
             del self.fade_q[sprite]
             
-    def clear(self, visuals):
-        for g in (self.bg.starfield, visuals[0], visuals[1]):
-            for s in g.sprites():
-                self.view.fill(self.bgcolor, s.rect)
+    #def clear(self):
+    #    #for g in (self.bg.starfield, visuals[0], visuals[1]):
+    #    #    for s in g.sprites():
+    #    #        self.view.fill(self.bgcolor, s.rect)
                 
     def apply_fx(self, visuals):
         for g in (self.bg.starfield, visuals[0], visuals[1]):
@@ -748,10 +747,13 @@ class Screen(object):
                 if s.visible:
                     TempImg, TempRect = s.image, s.rect
                     if s.opacity != 255:
-                        NewImg = pygame.Surface(TempRect.size)
-                        NewImg.blit(TempImg, (0, 0))
-                        NewImg.set_alpha(s.opacity)
-                        TempImg = NewImg
+                        if s in visuals[0]:
+                            TempImg.set_alpha(s.opacity)
+                        else:
+                            NewImg = pygame.Surface(TempRect.size).convert()
+                            NewImg.blit(TempImg, (0, 0))
+                            NewImg.set_alpha(s.opacity)
+                            TempImg = NewImg
                     if s.do_rotate:
                         NewImg = self.rotate_img(TempImg, s.rotation)
                         TempImg, TempRect = NewImg, NewImg.get_rect(center=s.pos)
@@ -772,11 +774,11 @@ def GameLoop():
                     for e in events:
                         if e.type == pygame.QUIT:
                             return False
+                    MyDisplay.view.fill(BLACK)
+                    MyDisplay.bg.update()
                     [None for i in MyDisplay.apply_fx(CurrentScene.visuals)]
                     pygame.display.flip()
                     FPSCLOCK.tick(FPS)
-                    MyDisplay.view.fill(BLACK)
-                    MyDisplay.bg.update()
                 #just to ensure there aren't too many listeners left over
                 #this will go away at some point
                 for k, v in Topics.iteritems():
@@ -805,8 +807,8 @@ def AltGameLoop():
                     pygame.display.update(tuple(MyDisplay.apply_fx(CurrentScene.visuals)))
                     #pygame.display.flip()
                     FPSCLOCK.tick(FPS)
+                    MyDisplay.clear()
                     #MyDisplay.clear(CurrentScene.visuals)
-                    MyDisplay.view.fill(BLACK)
                     MyDisplay.bg.update()
                         
                         
