@@ -12,13 +12,12 @@ class Explosion(ListenSprite):
         self.images = imgs
         self.counter = 0
         self.rate = rate
-        #self.do_rotate = False
         self.heading = heading
         
     def update(self):
         self.counter += 1
         imgindex = self.counter / self.rate
-        if imgindex < len(self.images):
+        if self.images[imgindex:]:
             self.image = self.images[imgindex]
         else:
             self.kill()

@@ -24,6 +24,9 @@ from code.shippiece import ShipPiece
 from code.playermouse import PlayerMouse
 from code.enemy import Enemy
 from code.scooter import Scooter
+from code.sweeper import Sweeper
+
+from code.helpers import coinflip, is_out_of_bounds, collide_hit_rect, get_blank_surf
 from os import path
 try:
     import cPickle as pickle
@@ -78,7 +81,7 @@ DIR_VALS = [UP, DOWN, LEFT, RIGHT, UPLEFT, DOWNLEFT, UPRIGHT, DOWNRIGHT]
 DIR_DIAGS = [i for i in DIR_VALS if 0 not in i]
 DIR_CROSS = [i for i in DIR_VALS if 0 in i]
 
-STARTINGLEVEL = 6
+STARTINGLEVEL = 9
 GOT_1UP = 5000
 TESTING = False
 
@@ -101,20 +104,27 @@ scoreList = [('NOP', 0) for i in range(0, 5)]
 
 #helpful standalone functions that just don't go anywhere in particular yet
     
-def coinflip():
-    """Randomly returns either True or False."""
-    return random.random() > 0.5
+#def coinflip():
+#    """Randomly returns either True or False."""
+#    return random.random() > 0.5
 
-def is_out_of_bounds(objXY, offset=15, w=SCR_W, h=SCR_H):
-    """Used to see if an object has gone too far
-    off the screen. Can be optionally passed an 'offset' to alter just how 
-    far off the screen an object can live.
-    """
-    return not ((w + offset) > objXY[0] > (offset * -1) and 
-                (h + offset) > objXY[1] > (offset * -1))
+#def is_out_of_bounds(objXY, offset=15, w=SCR_W, h=SCR_H):
+#    """Used to see if an object has gone too far
+#    off the screen. Can be optionally passed an 'offset' to alter just how 
+#    far off the screen an object can live.
+#    """
+#    #return not ((w + offset) > objXY[0] > (offset * -1) and 
+#    #            (h + offset) > objXY[1] > (offset * -1))
+#    return not ((w + offset) > objXY.x > (offset * -1) and 
+#                (h + offset) > objXY.y > (offset * -1))
     
-def collide_hit_rect(one, two):
-    return one.hit_rect.colliderect(two.hit_rect)
+#def collide_hit_rect(one, two):
+#    return one.hit_rect.colliderect(two.hit_rect)
+    
+#def get_blank_surf(size):
+#    NewSurf = pygame.Surface(size).convert()
+#    NewSurf.set_colorkey(NewSurf.get_at((0, 0)), pygame.RLEACCEL)
+#    return NewSurf
 
 class SoundPlayer(object):
     def __init__(self, volume=0.1):
@@ -151,30 +161,27 @@ REDSHIPIMG = ALLSHEET.image_at((0, 32, 32, 32), -1)
 GREENSHIPIMG = ALLSHEET.image_at((0, 64, 32, 32), -1)
 GOODGUYSHOT = ALLSHEET.image_at((64, 0, 32, 32), -1)
 BADGUYSHOT = ALLSHEET.image_at((64, 32, 32, 32), -1)
-##explosion
-BOOMONE = ALLSHEET.image_at((0, 96, 32, 32), -1)
-BOOMTWO = ALLSHEET.image_at((32, 96, 32, 32), -1)
-BOOMTHR = ALLSHEET.image_at((64, 96, 32, 32), -1)
-BOOMFOR = ALLSHEET.image_at((96, 96, 32, 32), -1)
-BOOMLIST = [BOOMONE, BOOMTWO, BOOMTHR, BOOMTWO, BOOMTHR, BOOMFOR, pygame.Surface((32, 32)).convert()]   
+
+exp_frames = (0, 1, 2, 3, 2, 3, 4)
+BOOMLIST = [ALLSHEET.image_at((ex * 32, 96, 32, 32), -1) for ex in exp_frames]
         
-class Sweeper(Enemy):
-    def __init__(self, x, y, dirs, img=GREENSHIPIMG, max_x=SCR_W+30, max_y=SCR_H+30):
-        super(Sweeper, self).__init__(x, y, dirs, img=img)
-        self.min_xy = -30
-        self.max_x = max_x
-        self.max_y = max_y
-    
-    def update(self):
-        self.move()
-        self.shot_check()
-        if is_out_of_bounds(self.pos):
-            if not self.min_xy < self.x < self.max_x:
-                self.y = random.randrange(25, (self.max_y - 55))
-                self.x = self.max_x - 10 if self.x <= 0 else -20
-            if not self.min_xy < self.y < self.max_y:
-                self.x = random.randrange(25, (self.max_x - 55))
-                self.y = self.max_y - 10 if self.y <= 0 else -20
+#class Sweeper(Enemy):
+#    def __init__(self, x, y, dirs, img=GREENSHIPIMG, max_x=SCR_W+30, max_y=SCR_H+30):
+#        super(Sweeper, self).__init__(x, y, dirs, img=img)
+#        self.min_xy = -30
+#        self.max_x = max_x
+#        self.max_y = max_y
+#    
+#    def update(self):
+#        self.move()
+#        self.shot_check()
+#        if is_out_of_bounds(self):
+#            if not self.min_xy < self.x < self.max_x:
+#                self.y = random.randrange(25, (self.max_y - 55))
+#                self.x = self.max_x - 10 if self.x <= 0 else -20
+#            if not self.min_xy < self.y < self.max_y:
+#                self.x = random.randrange(25, (self.max_x - 55))
+#                self.y = self.max_y - 10 if self.y <= 0 else -20
                 
 class Rammer(Enemy):
     def __init__(self, x, y, dirs):
@@ -186,10 +193,10 @@ class Rammer(Enemy):
         self.move_to_target(self.origin if ship.respawn else ship.pos)
         
 class Teleporter(Enemy):
-    def __init__(self, x, y, dirs, img=GREENSHIPIMG, leftlane=(15, 40), 
+    def __init__(self, x, y, img=GREENSHIPIMG, heading=None, leftlane=(15, 40), 
                     rightlane=(SCR_W-40, SCR_W-15), uplane=(15, 40), 
                     downlane=(SCR_H-40, SCR_H-15)):
-        super(Teleporter, self).__init__(x, y, dirs, img=img)
+        super(Teleporter, self).__init__(x, y, img, heading)
         self.speed = 2 * 2
         self.points = 200
         self.leftlane = range(leftlane[0], leftlane[1])
@@ -204,14 +211,13 @@ class Teleporter(Enemy):
     def got_hit(self):
         if (FPS/2) < self.counter < (FPS*2):
             return super(Teleporter, self).got_hit()
-        else:
-            pass
+            
+    def out_of_bounds(self):
+        self.bounce()
     
     def update(self):
         self.move()
         self.shot_check()
-        if is_out_of_bounds(self.pos):
-            self.bounce()
         self.counter -= 1
         if self.counter == FPS/2:
             self.hide(frames=FPS/2)
@@ -270,7 +276,7 @@ class Star(ListenSprite):
             heading = self.heading
         if color is None:
             color = self.color
-        NewSurf = pygame.Surface((speed * 2, speed * 2))
+        NewSurf = get_blank_surf((speed * 2, speed * 2))
         a = NewSurf.get_rect().center
         b = [i + (x * -speed) for i, x in zip(a, heading)]
         pygame.draw.line(NewSurf, color, a, b, 1)
@@ -489,11 +495,8 @@ class IntroScene(GameScene):
         self.add_obj(self.titletxt, self.menutxt)
     
     def main(self, events):
-        for e in events:
-            if e.type == pygame.KEYDOWN:
-                return False
         self.allq.update()
-        return True
+        return False if pygame.KEYDOWN in [e.type for e in events] else True
         
 class LevelScene(GameScene):
     def __init__(self, lvl=STARTINGLEVEL):
@@ -578,7 +581,7 @@ class LevelScene(GameScene):
                             x=random.choice(safex), 
                             y=random.choice(safey),
                             img=REDSHIPIMG.copy(),
-                            dirs=random.choice(DIR_VALS))
+                            heading=random.choice(DIR_VALS))
             NewEnemy.speed = int(math.floor(NewEnemy.speed * (1.05 ** variance)))
             NewEnemy.points = int(math.floor(NewEnemy.points + ((NewEnemy.points / 10) * variance)))
             NewEnemy.add(self.badq)
@@ -622,12 +625,25 @@ class LevelScene(GameScene):
                             if badguy not in self.badq and badguy.points:
                                 self.player.score += badguy.points
             #would be interesting to shorten this, maybe offset should be a class attribute
-            for shot in self.bulletq:
-                if is_out_of_bounds(shot.pos, offset=40):
-                    shot.kill()
-            for badguy in self.badq:
-                if is_out_of_bounds(badguy.pos, offset=30):
-                    badguy.out_of_bounds()
+            #for shot in self.bulletq:
+            #    if is_out_of_bounds(shot.pos, offset=40):
+            #        shot.kill()
+            #[b.kill() for b in self.bulletq if is_out_of_bounds(b.pos, offset=40)]
+            #for badguy in self.badq:
+            #    if is_out_of_bounds(badguy.pos, offset=30):
+            #        badguy.out_of_bounds()
+            #[n.out_of_bounds() for n in self.badq if is_out_of_bounds(n.pos, offset=30)]
+            #for obj in self.allq:
+            #    if is_out_of_bounds(obj.pos, offset=30):
+            #        obj.out_of_bounds()
+            #[o.out_of_bounds() for o in self.allq if is_out_of_bounds(o.pos, offset=30)]
+            #for obj in filter(is_out_of_bounds, self.allq.sprites()):
+            #    obj.out_of_bounds()
+            
+            ###out_q = [obj for obj in self.allq if is_out_of_bounds(obj)]
+            ###map(lambda x: x.out_of_bounds, out_q)
+            [x.out_of_bounds() for x in [o for o in self.allq if is_out_of_bounds(o)]]
+                
             if not self.player.lives:
                 self.state = 'gameover'
             elif not self.badq:
@@ -669,12 +685,7 @@ class GameOverScene(GameScene):
     def main(self, events):
         """Gets initials if you earned a hi-score. Displays scores."""
         if self.state == 'show_scores':
-            for obj in self.show_scores_q:
-                if obj.opacity == 0:
-                    obj.show(30)
-            for e in events:
-                if e.type == pygame.KEYDOWN:
-                    return False
+            return False if pygame.KEYDOWN in [e.type for e in events] else True
         if self.state == 'get_score':
             for e in events:
                 if e.type == pygame.KEYDOWN:
@@ -682,7 +693,7 @@ class GameOverScene(GameScene):
                     if next_char.isalnum():    #only letters/numbers
                         self.player_initials += next_char.upper()
                         self.initials.set_text(self.player_initials)
-                        if len(self.player_initials) == 3:
+                        if self.player_initials[2:]:
                             scoreList.append([self.player_initials, self.ship_score])
                             scoreList.sort(key=lambda x: x[1])
                             scoreList.reverse()
@@ -696,9 +707,11 @@ class GameOverScene(GameScene):
                 rgb = (50, 200 - (30 * i), 50)
                 Name = TextObj(x, y, name_num[0], rgb)
                 HiScore = TextObj(x * 2, y, name_num[1], rgb)
-                [obj.hide() for obj in (Name, HiScore)]
-                self.show_scores_q.add(Name, HiScore)
-                self.add_obj(Name, HiScore)
+                for txtobj in (Name, HiScore):
+                    txtobj.hide()
+                    txtobj.show(30)
+                    self.show_scores_q.add(txtobj)
+                    self.add_obj(txtobj)
             self.state = 'show_scores'
         self.allq.update()
         return True
@@ -733,11 +746,6 @@ class Screen(object):
         if sprite.opacity in endzone:
             sprite.opacity = target
             del self.fade_q[sprite]
-            
-    #def clear(self):
-    #    #for g in (self.bg.starfield, visuals[0], visuals[1]):
-    #    #    for s in g.sprites():
-    #    #        self.view.fill(self.bgcolor, s.rect)
                 
     def apply_fx(self, visuals):
         for g in (self.bg.starfield, visuals[0], visuals[1]):
@@ -747,15 +755,9 @@ class Screen(object):
                 if s.visible:
                     TempImg, TempRect = s.image, s.rect
                     if s.opacity != 255:
-                        if s in visuals[0]:
-                            TempImg.set_alpha(s.opacity)
-                        else:
-                            NewImg = pygame.Surface(TempRect.size).convert()
-                            NewImg.blit(TempImg, (0, 0))
-                            NewImg.set_alpha(s.opacity)
-                            TempImg = NewImg
+                        TempImg.set_alpha(s.opacity)
                     if s.do_rotate:
-                        NewImg = self.rotate_img(TempImg, s.rotation)
+                        NewImg = self.rotate_img(TempImg, s.rotation).convert()
                         TempImg, TempRect = NewImg, NewImg.get_rect(center=s.pos)
                     yield self.view.blit(TempImg, TempRect)
 
@@ -807,7 +809,7 @@ def AltGameLoop():
                     pygame.display.update(tuple(MyDisplay.apply_fx(CurrentScene.visuals)))
                     #pygame.display.flip()
                     FPSCLOCK.tick(FPS)
-                    MyDisplay.clear()
+                    MyDisplay.view.fill((0, 0, 0))
                     #MyDisplay.clear(CurrentScene.visuals)
                     MyDisplay.bg.update()
                         

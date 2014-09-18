@@ -1,6 +1,7 @@
 from listensprite import ListenSprite
-from pygame import Surface, draw, mouse
+from pygame import Surface, draw, mouse, RLEACCEL
 from random import randint, choice
+from helpers import get_blank_surf
 
 class PlayerMouse(ListenSprite):
     def __init__(self, x, y, bound_to, size=9):
@@ -13,7 +14,7 @@ class PlayerMouse(ListenSprite):
     def set_imgs(self):
         imgs = []
         for i in range(10):
-            NewSurf = Surface((self.size, self.size)).convert()
+            NewSurf = get_blank_surf((self.size, self.size))
             draw.rect(NewSurf, 
                     [randint(60, 220) for i in 'rgb'],
                     (0, 0, self.size, self.size), 1)

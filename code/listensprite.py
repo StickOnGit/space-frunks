@@ -1,6 +1,7 @@
 from pygame import sprite, Surface
 from tenfwd import publish, subscribe, unsub, unsub_all
 from math import sqrt
+from helpers import get_blank_surf
 
 class ListenSprite(sprite.Sprite):
     def __init__(self, x=0, y=0, img=None, speed=0, heading=None):
@@ -10,7 +11,7 @@ class ListenSprite(sprite.Sprite):
         self.target = [0, 0]
         self.opacity = 255
         self.do_rotate = True
-        self.image = img or Surface((16, 16)).convert()
+        self.image = img or get_blank_surf((32, 32))
         self._xy = [x, y]
         self.rect = self.set_rect()
     
@@ -100,15 +101,15 @@ class ListenSprite(sprite.Sprite):
     def unsub(self, message):
         unsub(self, message)
         
-    def hide(self, frames=1, target=0):
-        if frames == 1 and target == 0:
-            self.opacity = 0
+    def hide(self, frames=0, target=0):
+        if frames == 0:
+            self.opacity = target
         else:
             self.pub('add_to_fade_q', self, self.opacity, target, frames)
     
-    def show(self, frames=1, target=255):
-        if frames == 1 and target == 255:
-            self.opacity = 255
+    def show(self, frames=0, target=255):
+        if frames == 0:
+            self.opacity = target
         else:
             self.pub('add_to_fade_q', self, self.opacity, target, frames)
 

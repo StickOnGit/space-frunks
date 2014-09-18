@@ -1,8 +1,8 @@
 from enemy import Enemy
 
 class Scooter(Enemy):
-    def __init__(self, x, y, img, dirs):
-        super(Scooter, self).__init__(x, y, img=img, dirs=dirs)
+    def __init__(self, x, y, img, heading):
+        super(Scooter, self).__init__(x, y, img, heading)
         self.set_target_with_distance(self.range - self.counter)
     
     def update(self):

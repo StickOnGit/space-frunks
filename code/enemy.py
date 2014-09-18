@@ -3,14 +3,12 @@ from random import randint
 
 
 class Enemy(ListenSprite):
-    def __init__(self, x, y, dirs, img):
-        super(Enemy, self).__init__(x, y, img)
+    def __init__(self, x, y, img, heading, speed=6):
+        super(Enemy, self).__init__(x, y, img, speed, heading)
         self.shotrate = 20
         self.origin = self.pos
         self.range = randint(60, 120)
         self.counter = randint(0, self.range)
-        self.heading = dirs
-        self.speed = 3 * 2
         self.cooldown = 15
         self.points = 100
         
@@ -23,7 +21,6 @@ class Enemy(ListenSprite):
         with the player.
         """
         self.pub('enemy_died', self)
-        #enemyDeadSound.play()
         self.kill()
 
     def shot_check(self):
@@ -34,7 +31,6 @@ class Enemy(ListenSprite):
             self.fire()
                 
     def fire(self):
-        """Fires a shot in a random heading."""
+        """Sends the enemy_fired message and sets its cooldown."""
         self.pub('enemy_fired', self)
         self.cooldown = 15
-        #enemyShotSound.play()
