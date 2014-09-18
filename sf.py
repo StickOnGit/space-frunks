@@ -101,8 +101,6 @@ except:
             ]
             
 scoreList = [('NOP', 0) for i in range(0, 5)]
-
-#helpful standalone functions that just don't go anywhere in particular yet
     
 #def coinflip():
 #    """Randomly returns either True or False."""
@@ -624,24 +622,7 @@ class LevelScene(GameScene):
                             badguy.got_hit()
                             if badguy not in self.badq and badguy.points:
                                 self.player.score += badguy.points
-            #would be interesting to shorten this, maybe offset should be a class attribute
-            #for shot in self.bulletq:
-            #    if is_out_of_bounds(shot.pos, offset=40):
-            #        shot.kill()
-            #[b.kill() for b in self.bulletq if is_out_of_bounds(b.pos, offset=40)]
-            #for badguy in self.badq:
-            #    if is_out_of_bounds(badguy.pos, offset=30):
-            #        badguy.out_of_bounds()
-            #[n.out_of_bounds() for n in self.badq if is_out_of_bounds(n.pos, offset=30)]
-            #for obj in self.allq:
-            #    if is_out_of_bounds(obj.pos, offset=30):
-            #        obj.out_of_bounds()
-            #[o.out_of_bounds() for o in self.allq if is_out_of_bounds(o.pos, offset=30)]
-            #for obj in filter(is_out_of_bounds, self.allq.sprites()):
-            #    obj.out_of_bounds()
-            
-            ###out_q = [obj for obj in self.allq if is_out_of_bounds(obj)]
-            ###map(lambda x: x.out_of_bounds, out_q)
+            #maybe offset should be a class attribute
             [x.out_of_bounds() for x in [o for o in self.allq if is_out_of_bounds(o)]]
                 
             if not self.player.lives:
