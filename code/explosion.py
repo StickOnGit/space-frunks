@@ -8,16 +8,15 @@ class Explosion(ListenSprite):
             img = imgs[0]
         if heading is None:
             heading = [0, 0]
-        super(Explosion, self).__init__(x, y, img)
+        super(Explosion, self).__init__(x, y, img, heading)
         self.images = imgs
         self.counter = 0
         self.rate = rate
-        self.heading = heading
         
     def update(self):
         self.counter += 1
-        imgindex = self.counter / self.rate
-        if self.images[imgindex:]:
-            self.image = self.images[imgindex]
+        next = self.counter / self.rate
+        if self.images[next:]:
+            self.image = self.images[next]
         else:
             self.kill()

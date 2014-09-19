@@ -14,6 +14,10 @@ class ListenSprite(sprite.Sprite):
         self.image = img or get_blank_surf((32, 32))
         self._xy = [x, y]
         self.rect = self.set_rect()
+        ###static methods more or less###
+        self.sub = subscribe
+        self.pub = publish
+        self.unsub = unsub
     
     
     def out_of_bounds(self, *args):
@@ -24,6 +28,7 @@ class ListenSprite(sprite.Sprite):
         pass
         
     def set_rect(self):
+        """Returns current image's Rect centered on sprite's center x and y."""
         return self.image.get_rect(center=self._xy)
         
     @property
@@ -63,22 +68,28 @@ class ListenSprite(sprite.Sprite):
 
     @property
     def hit_rect(self):
-        """Gets the current drawn image's bounding rect,
-        centers it on the current rect, and then replaces
-        the current rect.
-        """
+        """Bounding rect of obj.image. For collisions."""
         new_rect = self.image.get_bounding_rect()
         new_rect.center = self.pos
         return new_rect
     
-    def set_heading(self, target):
-        self.heading = [i / abs(i) if i != 0 else 0 for i in [a - b for a, b in zip(target, self.pos)]]
+    def set_heading(self, goal):
+        """Uses a 'goal' (x, y) to set the object's heading.
+        Returns list of 0s and 1s for 'straight' headings.
+        Diagonal headings return list of math.sqrt(2) / 2.
+        """
+        vals = [a - b for a, b in zip(goal, self.pos)]
+        self.heading = [i / abs(i) if i != 0 else 0 for i in vals]
+        if 0 not in self.heading:
+            self.heading = [i * (sqrt(2)/2) for i in self.heading]
             
-    def set_target_with_distance(self, dist):
-        self.target = [a + (b * dist) for a, b in zip(self.pos, self.heading)]
+    def set_target_with_distance(self, d):
+        """Sets target along object's heading 'd' distance away."""
+        self.target = [a + (b * d) for a, b in zip(self.pos, self.heading)]
 
     def move(self):
-        self.pos = [a + (self.speed * b) for a, b in zip(self.pos, self.heading)]
+        """Moves the object by changing self.pos."""
+        self.pos = [a + (b * self.speed) for a, b in zip(self.pos, self.heading)]
     
     def move_to_target(self, target_pos):
         absX, absY = (abs(a - b) for a, b in zip(target_pos, self.pos))
@@ -91,15 +102,6 @@ class ListenSprite(sprite.Sprite):
                 self.y = target_pos[1]
         else:
             self.pos = target_pos
-
-    def sub(self, message):
-        subscribe(self, message)
-
-    def pub(self, message, *args, **kwargs):
-        publish(message, *args, **kwargs)
-
-    def unsub(self, message):
-        unsub(self, message)
         
     def hide(self, frames=0, target=0):
         if frames == 0:

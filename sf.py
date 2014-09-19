@@ -26,7 +26,7 @@ from code.enemy import Enemy
 from code.scooter import Scooter
 from code.sweeper import Sweeper
 
-from code.helpers import coinflip, is_out_of_bounds, collide_hit_rect, get_blank_surf
+from code.helpers import coinflip, get_blank_surf
 from os import path
 try:
     import cPickle as pickle
@@ -106,7 +106,7 @@ scoreList = [('NOP', 0) for i in range(0, 5)]
 #    """Randomly returns either True or False."""
 #    return random.random() > 0.5
 
-#def is_out_of_bounds(objXY, offset=15, w=SCR_W, h=SCR_H):
+#def offsides(objXY, offset=15, w=SCR_W, h=SCR_H):
 #    """Used to see if an object has gone too far
 #    off the screen. Can be optionally passed an 'offset' to alter just how 
 #    far off the screen an object can live.
@@ -173,7 +173,7 @@ BOOMLIST = [ALLSHEET.image_at((ex * 32, 96, 32, 32), -1) for ex in exp_frames]
 #    def update(self):
 #        self.move()
 #        self.shot_check()
-#        if is_out_of_bounds(self):
+#        if offsides(self):
 #            if not self.min_xy < self.x < self.max_x:
 #                self.y = random.randrange(25, (self.max_y - 55))
 #                self.x = self.max_x - 10 if self.x <= 0 else -20
@@ -508,6 +508,7 @@ class LevelScene(GameScene):
         self.gameover_font = pygame.font.Font('freesansbold.ttf', 36)
         self.go_to_gameover = FPS * 3
         self.setup_textobjs()
+        self.w, self.h = pygame.display.get_surface().get_size()
         self.sub_to_msgs('ship_set_score', 'ship_set_lives', 'set_lvl_txt',
                             'gameover_show', 'gameover_hide')
         
@@ -523,7 +524,7 @@ class LevelScene(GameScene):
         self.gameovertxt = TextObj(text='  '.join("GAME OVER"), 
                                 font=self.gameover_font)
         
-        
+        #set locations for all objects
         self.scoretxt.pin_at('topleft', (15, 15))
         self.scorenum.pin_at('topleft', (self.scoretxt.rect.topright[0] + 5, 
                                         self.scoretxt.rect.topright[1]))
@@ -541,6 +542,16 @@ class LevelScene(GameScene):
         
     def ship_set_lives(self, lives):
         self.livesnum.set_text(lives)
+        
+    def offsides(self, obj, w, h, offset=15):
+        """Checks to see if an object has gone so many pixels
+        outside the screen.
+        """
+        return not ((w + offset) > obj.x > (offset * -1) and 
+                    (h + offset) > obj.y > (offset * -1))
+                    
+    def check_hits(self, one, two):
+        return one.hit_rect.colliderect(two.hit_rect)
         
     def __enter__(self, *args):
         start_x, start_y = pygame.display.get_surface().get_rect().center
@@ -614,7 +625,7 @@ class LevelScene(GameScene):
                     else:
                         self.player.handle_key(e.key)
             for goodguy in self.goodq:
-                hit_list = pygame.sprite.spritecollide(goodguy, self.badq, False, collide_hit_rect)
+                hit_list = pygame.sprite.spritecollide(goodguy, self.badq, False, self.check_hits)
                 if hit_list:
                     goodguy.got_hit()
                     if goodguy is not self.player:
@@ -623,7 +634,7 @@ class LevelScene(GameScene):
                             if badguy not in self.badq and badguy.points:
                                 self.player.score += badguy.points
             #maybe offset should be a class attribute
-            [x.out_of_bounds() for x in [o for o in self.allq if is_out_of_bounds(o)]]
+            [x.out_of_bounds() for x in [o for o in self.allq if self.offsides(o, self.w, self.h)]]
                 
             if not self.player.lives:
                 self.state = 'gameover'
