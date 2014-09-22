@@ -6,9 +6,9 @@ class MultiText(TextObj):
     Changes when its counter is >= its switch value.
     """
     def __init__(self, x=0, y=0, all_texts=None, 
-                    color=None, font=None, switch=60, 
-                    pinned_to=(None, None)):
-        super(MultiText, self).__init__(x, y, None, color, font, pinned_to)
+            color=(50, 200, 50), size=16, 
+            switch=60, pinned_to=(None, None)):
+        super(MultiText, self).__init__(x, y, None, color, size, pinned_to)
         self.all_texts = self.set_all_texts(self.font, all_texts or [text], self.color)
         self.counter = 0
         self.switch = int(switch)
@@ -16,7 +16,7 @@ class MultiText(TextObj):
         self.set_rect()
         
     def set_all_texts(self, font, all_texts, color):
-        return [self.set_text_image(font, text, color) for text in all_texts]
+        return [self.set_text_image(text) for text in all_texts]
         
     def update(self):
         now = self.counter / self.switch

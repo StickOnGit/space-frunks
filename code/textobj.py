@@ -4,26 +4,21 @@ from helpers import get_blank_surf
 
 class TextObj(ListenSprite):
     def __init__(self, x=0, y=0, text=None, 
-                color=None, font=None, 
+                color=(50, 200, 50), size=16, 
                 pinned_to=(None, None)):
         if text is None:
             text = '_default_'
-        if color is None:
-            color = (50, 200, 50)
-        if font is None:
-            font = phont.Font('freesansbold.ttf', 24)
-        TextImg = self.set_text_image(font, text, color)
-        self.pinned_to = pinned_to
-        super(TextObj, self).__init__(x, y, img=TextImg)
+        self.font = phont.Font('freesansbold.ttf', size)
         self.color = color
-        self.font = font
+        self.pinned_to = pinned_to
+        super(TextObj, self).__init__(x, y, img=self.set_text_image(text))
         self.do_rotate = False
         self.set_rect()
         
-    def set_text_image(self, font, text, color):
+    def set_text_image(self, text):
         """Blits the return Surface from pygame.font.render() onto
         a Surface that will work as sprite image surfaces do."""
-        TextImg = font.render(str(text), True, color)
+        TextImg = self.font.render(str(text), True, self.color)
         NewImg = get_blank_surf(TextImg.get_size())
         NewImg.blit(TextImg, (0, 0))
         return NewImg
@@ -49,6 +44,6 @@ class TextObj(ListenSprite):
     
     def set_text(self, text):
         """Creates a new obj.image and sets the Rect accordingly."""
-        self.image = self.set_text_image(self.font, text, self.color)
+        self.image = self.set_text_image(text)
         self.set_rect()
 
