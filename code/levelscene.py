@@ -1,6 +1,5 @@
 from gamescene import GameScene, with_sound
 from spritesheet import spritesheet
-#from textobj import TextObj
 from player import Player
 from playermouse import PlayerMouse
 from explosion import Explosion

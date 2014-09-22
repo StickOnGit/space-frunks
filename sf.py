@@ -29,6 +29,7 @@ from code.playermouse import PlayerMouse
 from code.enemy import Enemy
 from code.scooter import Scooter
 from code.sweeper import Sweeper
+from code.statkeeper import StatKeeper
 
 from code.helpers import coinflip, get_blank_surf
 from os import path
@@ -198,17 +199,7 @@ class Starfield(object):
                 star.y = SCR_H + star.speed if star.y <= 0 else 0 - star.speed
  
 
-class StatKeeper(object):
-    def __init__(self):
-        self.storage = {}
-        subscribe(self, 'save')
-        subscribe(self, 'give')
-        
-    def save(self, k, v):
-        self.storage[k] = v
-    
-    def give(self, k):
-        return self.storage.get(k)
+
         
 #def enemy_boomer(self):
 #    """Comes in from the borders and then blows up for big damages."""

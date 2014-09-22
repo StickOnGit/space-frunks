@@ -1,14 +1,8 @@
 from scene import Scene
-from pygame import sprite, Rect, transform, display
+from pygame import sprite, display
 from tenfwd import publish, subscribe, unsub_all
-from math import atan2, degrees
-from explosion import Explosion
-from risetext import RiseText
 from textobj import TextObj
 from bullet import Bullet
-from shippiece import ShipPiece
-from spritesheet import spritesheet
-from random import choice
 
 def with_sound(func):
     def _inner(*a, **k):
