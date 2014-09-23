@@ -10,7 +10,7 @@
 import pygame
 import random
 import sys
-import spritesheet
+#import spritesheet
 import math
 from code.tenfwd import subscribe, unsub, unsub_all, publish, publish_with_results, Topics
 from code.listensprite import ListenSprite
@@ -18,17 +18,9 @@ from code.gamescene import GameScene
 from code.introscene import IntroScene
 from code.levelscene import LevelScene
 from code.gameoverscene import GameOverScene
-from code.player import Player
-from code.bullet import Bullet
-from code.textobj import TextObj
-from code.risetext import RiseText
-from code.explosion import Explosion
-from code.multitext import MultiText
-from code.shippiece import ShipPiece
-from code.playermouse import PlayerMouse
 from code.enemy import Enemy
-from code.scooter import Scooter
-from code.sweeper import Sweeper
+#from code.scooter import Scooter
+#from code.sweeper import Sweeper
 from code.statkeeper import StatKeeper
 
 from code.helpers import coinflip, get_blank_surf
@@ -40,47 +32,39 @@ pygame.init()
 #global variables and syntactic sugar
 SCR_W = 640
 SCR_H = 480
-SCR_D = math.hypot(SCR_W, SCR_H)
 
 GAMEFONT = pygame.font.Font('freesansbold.ttf', 24)
 FPS = 30
 
-RED = (255, 0, 0)
-LITERED = (255, 100, 100)
-GREEN = (0, 255, 0)
-BLUE = (0, 0, 255)
-PURPLE = (128, 0, 128)
 BLACK = (0, 0, 0)
-YELLOW = (255, 255, 0)
-WHITE = (255, 255, 255)
 
 
-Rt2 = math.sqrt(2)
-Pt7 = 1.0 / Rt2
+#Rt2 = math.sqrt(2)
+#Pt7 = 1.0 / Rt2
 
-UP = [0, -1]
-DOWN = [0, 1]
-LEFT = [-1, 0]
-RIGHT = [1, 0]
-UPLEFT = [-Pt7, -Pt7]
-UPRIGHT = [Pt7, -Pt7]
-DOWNLEFT = [-Pt7, Pt7]
-DOWNRIGHT = [Pt7, Pt7]
+#UP = [0, -1]
+#DOWN = [0, 1]
+#LEFT = [-1, 0]
+#RIGHT = [1, 0]
+#UPLEFT = [-Pt7, -Pt7]
+#UPRIGHT = [Pt7, -Pt7]
+#DOWNLEFT = [-Pt7, Pt7]
+#DOWNRIGHT = [Pt7, Pt7]
 
-KEY_VAL = {
-            pygame.K_KP8: UP,
-            pygame.K_KP2: DOWN,
-            pygame.K_KP4: LEFT,
-            pygame.K_KP6: RIGHT,
-            pygame.K_KP7: UPLEFT,
-            pygame.K_KP1: DOWNLEFT,
-            pygame.K_KP9: UPRIGHT,
-            pygame.K_KP3: DOWNRIGHT
-        }
+#KEY_VAL = {
+#            pygame.K_KP8: UP,
+#            pygame.K_KP2: DOWN,
+#            pygame.K_KP4: LEFT,
+#            pygame.K_KP6: RIGHT,
+#            pygame.K_KP7: UPLEFT,
+#            pygame.K_KP1: DOWNLEFT,
+#            pygame.K_KP9: UPRIGHT,
+#            pygame.K_KP3: DOWNRIGHT
+#        }
 
-DIR_VALS = [UP, DOWN, LEFT, RIGHT, UPLEFT, DOWNLEFT, UPRIGHT, DOWNRIGHT]
-DIR_DIAGS = [i for i in DIR_VALS if 0 not in i]
-DIR_CROSS = [i for i in DIR_VALS if 0 in i]
+#DIR_VALS = [UP, DOWN, LEFT, RIGHT, UPLEFT, DOWNLEFT, UPRIGHT, DOWNRIGHT]
+#DIR_DIAGS = [i for i in DIR_VALS if 0 not in i]
+#DIR_CROSS = [i for i in DIR_VALS if 0 in i]
 
 STARTINGLEVEL = 9
 GOT_1UP = 5000
@@ -173,7 +157,7 @@ class Starfield(object):
     def __init__(self, stars=50):
         self.stars = stars
         self.starfield = pygame.sprite.Group()
-        self.heading = DOWN
+        self.heading = [0, 1]
         self.add_stars()
         subscribe(self, 'new_heading')
     
@@ -183,8 +167,10 @@ class Starfield(object):
             speed = random.randrange(1, 5)
             self.starfield.add(Star(x, y, speed, self.heading))
             
-    def new_heading(self, dirs=DIR_VALS):
-        self.heading = random.choice([x for x in dirs if x != self.heading])
+    def new_heading(self):
+        nums = (-1, 0, 1)
+        picks = [[x, y] for x in nums for y in nums if not x == y == 0]
+        self.heading = random.choice(picks)
         for star in self.starfield:
             star.heading = self.heading
             star.image = star.set_image()
