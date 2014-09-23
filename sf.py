@@ -141,7 +141,8 @@ class Star(ListenSprite):
     def set_color(self, speed=None):
         if speed is None:
             speed = self.speed
-        new_c = [int(c * speed * 0.25) for c in (180, 150, 150)]
+        base_color = [random.randint(60, 180) for j in 'rgb']
+        new_c = [int(c * speed * 0.25) for c in base_color]
         for i, c in enumerate(new_c):
             if not 0 <= c <= 255:
                 new_c[i] = 0 if c < 0 else 255
