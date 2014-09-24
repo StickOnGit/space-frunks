@@ -18,9 +18,6 @@ from code.gamescene import GameScene
 from code.introscene import IntroScene
 from code.levelscene import LevelScene
 from code.gameoverscene import GameOverScene
-from code.enemy import Enemy
-#from code.scooter import Scooter
-#from code.sweeper import Sweeper
 from code.statkeeper import StatKeeper
 
 from code.helpers import coinflip, get_blank_surf
@@ -33,38 +30,8 @@ pygame.init()
 SCR_W = 640
 SCR_H = 480
 
-GAMEFONT = pygame.font.Font('freesansbold.ttf', 24)
 FPS = 30
 
-BLACK = (0, 0, 0)
-
-
-#Rt2 = math.sqrt(2)
-#Pt7 = 1.0 / Rt2
-
-#UP = [0, -1]
-#DOWN = [0, 1]
-#LEFT = [-1, 0]
-#RIGHT = [1, 0]
-#UPLEFT = [-Pt7, -Pt7]
-#UPRIGHT = [Pt7, -Pt7]
-#DOWNLEFT = [-Pt7, Pt7]
-#DOWNRIGHT = [Pt7, Pt7]
-
-#KEY_VAL = {
-#            pygame.K_KP8: UP,
-#            pygame.K_KP2: DOWN,
-#            pygame.K_KP4: LEFT,
-#            pygame.K_KP6: RIGHT,
-#            pygame.K_KP7: UPLEFT,
-#            pygame.K_KP1: DOWNLEFT,
-#            pygame.K_KP9: UPRIGHT,
-#            pygame.K_KP3: DOWNRIGHT
-#        }
-
-#DIR_VALS = [UP, DOWN, LEFT, RIGHT, UPLEFT, DOWNLEFT, UPRIGHT, DOWNRIGHT]
-#DIR_DIAGS = [i for i in DIR_VALS if 0 not in i]
-#DIR_CROSS = [i for i in DIR_VALS if 0 in i]
 
 STARTINGLEVEL = 9
 GOT_1UP = 5000
@@ -82,7 +49,6 @@ class SoundPlayer(object):
                         'enemy_died': self.load_snd('enemydead.wav')}
                         
         self.volume = volume
-        
         subscribe(self, 'play_sound')
         
     def load_snd(self, filename, path_to_sound='sounds'):
@@ -96,15 +62,6 @@ class SoundPlayer(object):
         if sfx is not None:
             sfx.set_volume(self.volume)
             sfx.play()
-                
-class Rammer(Enemy):
-    def __init__(self, x, y, heading):
-        super(Rammer, self).__init__(x, y, heading)
-        self.speed = 2
-        self.points = 300
-    
-    def update(self):
-        self.move_to_target(self.origin if ship.respawn else ship.pos)
 
 class Star(ListenSprite):
     def __init__(self, x, y, speed, heading):
@@ -184,10 +141,8 @@ class Starfield(object):
             if not -1 < star.y < SCR_H + 1:
                 star.x = random.randrange(0, SCR_W)
                 star.y = SCR_H + star.speed if star.y <= 0 else 0 - star.speed
- 
 
 
-        
 #def enemy_boomer(self):
 #    """Comes in from the borders and then blows up for big damages."""
 #    startX, startY = self.origin
@@ -217,10 +172,10 @@ class Starfield(object):
 #        self.speed = 3
 
 class Screen(object):
-    def __init__(self, title='Space Frunks', bg=None, bgcolor=BLACK):
+    def __init__(self, title='Space Frunks', bg=None, bgcolor=(0, 0, 0)):
         self.view = pygame.display.get_surface()
         self.bg = bg or Starfield()
-        self.bgcolor = bgcolor or BLACK
+        self.bgcolor = bgcolor or (0, 0, 0)
         self.fade_q = {}
         pygame.display.set_caption(title)
         subscribe(self, 'add_to_fade_q')
@@ -247,7 +202,7 @@ class Screen(object):
                 if s in self.fade_q:
                     self.fade_img(s)
                 if s.visible:
-                    TempImg, TempRect = s.image.copy(), s.rect
+                    TempImg, TempRect = s.image, s.rect
                     if s.opacity != 255:
                         TempImg.set_alpha(s.opacity)
                     if s.do_rotate:
@@ -270,10 +225,11 @@ def GameLoop():
                     for e in events:
                         if e.type == pygame.QUIT:
                             return False
-                    [None for i in MyDisplay.apply_fx(CurrentScene.visuals)]
-                    pygame.display.flip()
+                    for i in MyDisplay.apply_fx(CurrentScene.visuals): 
+                        pass                #this loop won't need return value
+                    pygame.display.flip()   #because .flip() != .update()
                     FPSCLOCK.tick(FPS)
-                    MyDisplay.view.fill(BLACK)
+                    MyDisplay.view.fill((0, 0, 0))
                     MyDisplay.bg.update()
                 #just to ensure there aren't too many listeners left over
                 #this will go away at some point
@@ -305,7 +261,7 @@ def AltGameLoop():
                     #pygame.display.flip()
                     FPSCLOCK.tick(FPS)
                     blacksurf = pygame.Surface(MyDisplay.view.get_size())
-                    blacksurf.fill(BLACK)
+                    blacksurf.fill((0, 0, 0))
                     blacksurf.set_alpha(None)
                     MyDisplay.view.blit(blacksurf, (0, 0))
                     #MyDisplay.clear(CurrentScene.visuals)

@@ -30,6 +30,4 @@ def publish(topic, *args, **kwargs):
         
 def publish_with_results(topic, *args, **kwargs):
     """Same as publish, but returns list of results."""
-    gack = [getattr(obj, topic)(*args, **kwargs) for obj in Topics[topic]]
-    #print "gack = {}".format(gack)
-    return gack
+    return [getattr(obj, topic)(*args, **kwargs) for obj in Topics[topic]]

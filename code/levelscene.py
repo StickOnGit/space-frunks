@@ -10,6 +10,7 @@ from shippiece import ShipPiece
 from scooter import Scooter
 from sweeper import Sweeper
 from teleporter import Teleporter
+from rammer import Rammer
 from tenfwd import subscribe, publish, publish_with_results
 import pygame
 import math
@@ -46,7 +47,7 @@ class LevelScene(GameScene):
         self.sub_to_msgs('ship_set_score', 'ship_set_lives', 'set_lvl_txt',
                          'gameover_show', 'gameover_hide', 'teleported',
                          'player_fired', 'player_died', 'got_1up',
-                         'enemy_died', 'enemy_fired')
+                         'enemy_died', 'enemy_fired', 'can_lock_on_ship')
                             
     def get_images(self):
         Sheet = spritesheet('imgs/sheet.png')
@@ -106,12 +107,32 @@ class LevelScene(GameScene):
     def get_pt_in_lane(self):
         lane = random.choice([self.west, self.east, self.north, self.south])
         return [random.randint(*p) for p in zip(lane.topleft, lane.bottomright)]
+        
+    def set_heading_from_lane(self, obj):
+        lanes = {
+            'north': ([-1, 1], [0, 1], [1, 1]),
+            'south': ([-1, -1], [0, -1], [1, -1]),
+            'east': ([-1, -1], [-1, 0], [-1, 1]),
+            'west': ([1, -1], [1, 0], [1, 1])
+        }
+        dirs = []
+        for lane in lanes:
+            if getattr(self, lane).collidepoint(obj.pos):
+                [dirs.append(d) for d in lanes[lane] if d not in dirs]
+        obj.heading = random.choice(dirs)
     
     def ship_set_score(self, score):
         self.scorenum.set_text(score)
         
     def ship_set_lives(self, lives):
         self.livesnum.set_text(lives)
+        
+    def can_lock_on_ship(self, asker):
+        if self.player.respawn:
+            asker.bound_to = None
+        else:
+            asker.bound_to = self.player
+        
     
     @with_sound
     def player_fired(self, player, heading):
@@ -162,6 +183,7 @@ class LevelScene(GameScene):
     @with_sound
     def teleported(self, obj):
         obj.pos = self.get_pt_in_lane()
+        self.set_heading_from_lane(obj)
         
     def __enter__(self, *args):
         start_x, start_y = self.w / 2, self.h / 2
@@ -195,7 +217,7 @@ class LevelScene(GameScene):
             x, y = self.get_pt_in_lane()
             NewEnemy = random.choice(kinds_of_AI)(
                             x=x, y=y,
-                            img=self.imgbank['RedShip'],
+                            img=self.imgbank['RedShip'].copy(),
                             heading=random.choice(KEY_VAL.values()))
             NewEnemy.speed = int(math.floor(NewEnemy.speed * (1.05 ** variance)))
             NewEnemy.points = int(math.floor(NewEnemy.points + ((NewEnemy.points / 10) * variance)))
