@@ -33,7 +33,7 @@ class LevelScene(GameScene):
     def __init__(self):
         super(LevelScene, self).__init__()
         self.imgbank = self.get_images()
-        self.lvl = 4
+        self.lvl = 17
         self.goodq = pygame.sprite.Group()
         self.badq = pygame.sprite.Group()
         self.state = 'setup'
@@ -119,7 +119,8 @@ class LevelScene(GameScene):
         for lane in lanes:
             if getattr(self, lane).collidepoint(obj.pos):
                 [dirs.append(d) for d in lanes[lane] if d not in dirs]
-        obj.heading = random.choice(dirs)
+        if dirs:
+            obj.heading = random.choice(dirs)
     
     def ship_set_score(self, score):
         self.scorenum.set_text(score)

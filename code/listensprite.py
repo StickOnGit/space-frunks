@@ -73,15 +73,16 @@ class ListenSprite(sprite.Sprite):
         new_rect.center = self.pos
         return new_rect
     
-    def set_heading(self, goal):
-        """Uses a 'goal' (x, y) to set the object's heading.
-        Returns list of 0s and 1s for 'straight' headings.
-        Diagonal headings return list of math.sqrt(2) / 2.
+    def set_heading(self, xy):
+        """Gets a unit vector from the difference of self.pos and
+        the target xy coords, assigns it to self.heading.
         """
-        vals = [a - b for a, b in zip(goal, self.pos)]
-        self.heading = [i / abs(i) if i != 0 else 0 for i in vals]
-        if 0 not in self.heading:
-            self.heading = [i * (sqrt(2)/2) for i in self.heading]
+        vals = [a - b for a, b in zip(xy, self.pos)]
+        mag = sqrt(sum([i**2 for i in vals]))
+        self.heading = [p / mag for p in vals]
+        #self.heading = [i / abs(i) if i != 0 else 0 for i in vals]
+        #if 0 not in self.heading:
+        #    self.heading = [i * (sqrt(2)/2) for i in self.heading]
             
     def set_target_with_distance(self, d):
         """Sets target along object's heading 'd' distance away."""
@@ -91,17 +92,22 @@ class ListenSprite(sprite.Sprite):
         """Moves the object by changing self.pos."""
         self.pos = [a + (b * self.speed) for a, b in zip(self.pos, self.heading)]
     
-    def move_to_target(self, target_pos):
-        absX, absY = (abs(a - b) for a, b in zip(target_pos, self.pos))
-        if absX**2 + absY**2 >= self.speed**2:
-            self.set_heading(target_pos)
+    def move_to_target(self, xy):
+        #absX, absY = (abs(a - b) for a, b in zip(target_pos, self.pos))
+        #if absX**2 + absY**2 > self.speed**2:
+            #self.set_heading(xy)
+            #self.move()
+            #if absX < self.speed:
+            #    self.x = xy[0]
+            #if absY < self.speed:
+            #    self.y = xy[1]
+        #else:
+            #self.pos = xy
+        if sum((abs(a - b)**2 for a, b in zip(xy, self.pos))) > self.speed**2:
+            self.set_heading(xy)
             self.move()
-            if absX < self.speed:
-                self.x = target_pos[0]
-            if absY < self.speed:
-                self.y = target_pos[1]
         else:
-            self.pos = target_pos
+            self.pos = xy
         
     def hide(self, frames=0, target=0):
         if frames == 0:

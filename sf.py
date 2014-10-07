@@ -197,6 +197,7 @@ class Screen(object):
             del self.fade_q[sprite]
                 
     def apply_fx(self, visuals):
+        #img_rects = []
         for g in (self.bg.starfield, visuals[0], visuals[1]):
             for s in g.sprites():
                 if s in self.fade_q:
@@ -208,7 +209,10 @@ class Screen(object):
                     if s.do_rotate:
                         TempImg = self.rotate_img(TempImg, s.rotation)
                         TempRect = TempImg.get_rect(center=s.pos)
-                    yield self.view.blit(TempImg, TempRect)
+                    #img_rects.append((TempImg, TempRect))
+                    #yield self.view.blit(TempImg, TempRect)
+                    yield TempImg, TempRect
+        #return img_rects
 
 def GameLoop():
     FPSCLOCK = pygame.time.Clock()
@@ -218,15 +222,17 @@ def GameLoop():
     SP = SoundPlayer()
     while True:
         for S in AllScenes:
-            with S() as CurrentScene:
+            with S() as ThisScene:
                 events = []
-                while CurrentScene(events):
+                while ThisScene(events):
                     events = pygame.event.get()
                     for e in events:
                         if e.type == pygame.QUIT:
                             return False
-                    for i in MyDisplay.apply_fx(CurrentScene.visuals): 
-                        pass                #this loop won't need return value
+                    for i, r in MyDisplay.apply_fx(ThisScene.visuals):
+                        MyDisplay.view.blit(i, r)
+                   # map(lambda q: MyDisplay.view.blit(*q), MyDisplay.apply_fx(ThisScene.visuals))
+                        #pass                #this loop won't need return value
                     pygame.display.flip()   #because .flip() != .update()
                     FPSCLOCK.tick(FPS)
                     MyDisplay.view.fill((0, 0, 0))
@@ -246,9 +252,9 @@ def AltGameLoop():
     SP = SoundPlayer()
     while True:
         for S in AllScenes:
-            with S() as CurrentScene:
+            with S() as ThisScene:
                 events = []
-                while CurrentScene(events):
+                while ThisScene(events):
                     events = pygame.event.get()
                     for e in events:
                         if e.type == pygame.QUIT:
@@ -256,7 +262,7 @@ def AltGameLoop():
                     ##leaves tracers in Ubuntu
                     ##but looks fine in OS X
                     ##what is this, self % 2 == 1 :(
-                    rects = tuple(MyDisplay.apply_fx(CurrentScene.visuals))
+                    rects = tuple(MyDisplay.apply_fx(ThisScene.visuals))
                     pygame.display.update(rects)
                     #pygame.display.flip()
                     FPSCLOCK.tick(FPS)
@@ -264,7 +270,7 @@ def AltGameLoop():
                     blacksurf.fill((0, 0, 0))
                     blacksurf.set_alpha(None)
                     MyDisplay.view.blit(blacksurf, (0, 0))
-                    #MyDisplay.clear(CurrentScene.visuals)
+                    #MyDisplay.clear(ThisScene.visuals)
                     MyDisplay.bg.update()
                         
                         
