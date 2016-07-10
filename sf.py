@@ -33,7 +33,7 @@ SCR_H = 480
 FPS = 30
 
 
-STARTINGLEVEL = 9
+STARTINGLEVEL = 0
 GOT_1UP = 5000
 TESTING = False
 
@@ -231,17 +231,10 @@ def GameLoop():
                             return False
                     for i, r in MyDisplay.apply_fx(ThisScene.visuals):
                         MyDisplay.view.blit(i, r)
-                   # map(lambda q: MyDisplay.view.blit(*q), MyDisplay.apply_fx(ThisScene.visuals))
-                        #pass                #this loop won't need return value
-                    pygame.display.flip()   #because .flip() != .update()
+                    pygame.display.flip()
                     FPSCLOCK.tick(FPS)
                     MyDisplay.view.fill((0, 0, 0))
                     MyDisplay.bg.update()
-                #just to ensure there aren't too many listeners left over
-                #this will go away at some point
-                for k, v in Topics.iteritems():
-                    if len(v) > 1:
-                        print "{}: {}".format(k, len(v))
 
 def AltGameLoop():
     """Works fine on OS X, but not in Ubuntu??"""
