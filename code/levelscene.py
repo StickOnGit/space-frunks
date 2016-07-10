@@ -33,7 +33,7 @@ class LevelScene(GameScene):
     def __init__(self):
         super(LevelScene, self).__init__()
         self.imgbank = self.get_images()
-        self.lvl = 17
+        self.lvl = 0
         self.goodq = pygame.sprite.Group()
         self.badq = pygame.sprite.Group()
         self.state = 'setup'
